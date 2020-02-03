@@ -1126,7 +1126,7 @@ function write_ws_xlml_table(ws/*:Worksheet*/, opts, idx/*:number*/, wb/*:Workbo
 	if(ws['!cols']) ws['!cols'].forEach(function(n, i) {
 		process_col(n);
 		var w = !!n.width;
-		var p = col_obj_w(i, n);
+		var p = col_obj_w(i, n, opts);
 		var k/*:any*/ = {"ss:Index":i+1};
 		if(w) k['ss:Width'] = width2px(p.width);
 		if(n.hidden) k['ss:Hidden']="1";

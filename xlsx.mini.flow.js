@@ -6063,8 +6063,8 @@ function get_sst_id(sst/*:SST*/, str/*:string*/, rev)/*:number*/ {
 	return len;
 }
 
-function col_obj_w(C/*:number*/, col) {
-	var p = ({min:C+1,max:C+1}/*:any*/);
+function col_obj_w(C/*:number*/, col, opts) {
+	var p = (opts && !opts.allCols) ? ({min:col.min,max:col.max}) : ({min:C+1,max:C+1}/*:any*/);
 	/* wch (chars), wpx (pixels) */
 	var wch = -1;
 	if(col.MDW) MDW = col.MDW;
@@ -6247,7 +6247,7 @@ function parse_ws_xml(data/*:?string*/, opts, idx/*:number*/, rels, wb/*:WBWBPro
 	if(opts.cellStyles) {
 		/* 18.3.1.13 col CT_Col */
 		var cols = data1.match(colregex);
-		if(cols) parse_ws_xml_cols(columns, cols);
+		if(cols) parse_ws_xml_cols(columns, cols, opts);
 	}
 
 	/* 18.3.1.80 sheetData CT_SheetData ? */
@@ -6413,23 +6413,26 @@ function write_ws_xml_margins(margin)/*:string*/ {
 	return writextag('pageMargins', null, margin);
 }
 
-function parse_ws_xml_cols(columns, cols) {
+function parse_ws_xml_cols(columns, cols, opts) {
 	var seencol = false;
 	for(var coli = 0; coli != cols.length; ++coli) {
 		var coll = parsexmltag(cols[coli], true);
 		if(coll.hidden) coll.hidden = parsexmlbool(coll.hidden);
-		var colm=parseInt(coll.min, 10)-1, colM=parseInt(coll.max,10)-1;
-		delete coll.min; delete coll.max; coll.width = +coll.width;
-		if(!seencol && coll.width) { seencol = true; find_mdw_colw(coll.width); }
 		process_col(coll);
-		while(colm <= colM) columns[colm++] = dup(coll);
+		columns[coli] = coll;
+		if (!(opts && opts.allCols)) {
+			var colm=parseInt(coll.min, 10)-1, colM=parseInt(coll.max,10)-1;
+			delete coll.min; delete coll.max; coll.width = +coll.width;
+			if(!seencol && coll.width) { seencol = true; find_mdw_colw(coll.width); }
+			while(colm <= colM) columns[colm++] = dup(coll);
+		}
 	}
 }
-function write_ws_xml_cols(ws, cols)/*:string*/ {
+function write_ws_xml_cols(ws, cols, opts)/*:string*/ {
 	var o = ["<cols>"], col;
 	for(var i = 0; i != cols.length; ++i) {
 		if(!(col = cols[i])) continue;
-		o[o.length] = (writextag('col', null, col_obj_w(i, col)));
+		o[o.length] = (writextag('col', null, col_obj_w(i, col, opts)));
 	}
 	o[o.length] = "</cols>";
 	return o.join("");
@@ -6765,7 +6768,7 @@ function write_ws_xml(idx/*:number*/, opts, wb/*:Workbook*/, rels)/*:string*/ {
 		outlineLevelRow:opts.sheetFormat.outlineLevelRow||'7'
 	}));
 
-	if(ws['!cols'] != null && ws['!cols'].length > 0) o[o.length] = (write_ws_xml_cols(ws, ws['!cols']));
+	if(ws['!cols'] != null && ws['!cols'].length > 0) o[o.length] = (write_ws_xml_cols(ws, ws['!cols'], opts));
 
 	o[sidx = o.length] = '<sheetData/>';
 	ws['!links'] = [];
@@ -7735,6 +7738,7 @@ var fix_read_opts = fix_opts_func([
 
 	['sheetStubs', false], /* emit empty cells */
 	['sheetRows', 0, 'n'], /* read n rows (0 = read all rows) */
+	['allCols', true],
 
 	['bookDeps', false], /* parse calculation chains */
 	['bookSheets', false], /* only try to get sheet names (no Sheets) */

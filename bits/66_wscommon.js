@@ -34,8 +34,8 @@ function get_sst_id(sst/*:SST*/, str/*:string*/, rev)/*:number*/ {
 	return len;
 }
 
-function col_obj_w(C/*:number*/, col) {
-	var p = ({min:C+1,max:C+1}/*:any*/);
+function col_obj_w(C/*:number*/, col, opts) {
+	var p = (opts && !opts.allCols) ? ({min:col.min,max:col.max}) : ({min:C+1,max:C+1}/*:any*/);
 	/* wch (chars), wpx (pixels) */
 	var wch = -1;
 	if(col.MDW) MDW = col.MDW;
