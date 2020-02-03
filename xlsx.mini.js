@@ -4891,7 +4891,7 @@ var XLMLPatternTypeMap = {
 /* 18.8.5 borders CT_Borders */
 function parse_borders(t, styles, themes, opts) {
 	styles.Borders = [];
-	var border = {};
+	var border = {}, sub_border = {};
 	var pass = false;
 	(t[0].match(tagregex)||[]).forEach(function(x) {
 		var y = parsexmltag(x);
@@ -4909,26 +4909,51 @@ function parse_borders(t, styles, themes, opts) {
 
 			/* note: not in spec, appears to be CT_BorderPr */
 			case '<left/>': break;
-			case '<left': case '<left>': break;
+			case '<left': case '<left>':
+				sub_border = border.left = {};
+				if (y.style) {
+					sub_border.style = y.style;
+				}
+				break;
 			case '</left>': break;
 
 			/* note: not in spec, appears to be CT_BorderPr */
-			case '<right/>': break;
-			case '<right': case '<right>': break;
+			case '<right/>':
+			case '<right': case '<right>':
+				sub_border = border.right = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</right>': break;
 
 			/* 18.8.43 top CT_BorderPr */
-			case '<top/>': break;
-			case '<top': case '<top>': break;
+			case '<top/>':
+			case '<top': case '<top>':
+				sub_border = border.top = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</top>': break;
 
 			/* 18.8.6 bottom CT_BorderPr */
-			case '<bottom/>': break;
-			case '<bottom': case '<bottom>': break;
+			case '<bottom/>':
+			case '<bottom': case '<bottom>':
+				sub_border = border.bottom = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</bottom>': break;
 
 			/* 18.8.13 diagonal CT_BorderPr */
-			case '<diagonal': case '<diagonal>': case '<diagonal/>': break;
+			case '<diagonal': case '<diagonal>': case '<diagonal/>':
+				sub_border = border.diagonal = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</diagonal>': break;
 
 			/* 18.8.25 horizontal CT_BorderPr */
@@ -4949,6 +4974,15 @@ function parse_borders(t, styles, themes, opts) {
 
 			/* 18.8.? color CT_Color */
 			case '<color': case '<color>':
+				sub_border.color = {};
+				if (y.theme) sub_border.color.theme = y.theme;
+				if (y.theme && themes.themeElements && themes.themeElements.clrScheme) {
+					sub_border.color.rgb = rgb_tint(themes.themeElements.clrScheme[sub_border.color.theme].rgb, sub_border.color.tint || 0);
+				}
+
+				if (y.tint) sub_border.color.tint = y.tint;
+				if (y.rgb) sub_border.color.rgb = y.rgb;
+				if (y.auto) sub_border.color.auto = y.auto;
 				break;
 			case '<color/>': case '</color>': break;
 
@@ -5308,6 +5342,9 @@ var STYLES_XML_ROOT = writextag('styleSheet', null, {
 RELS.STY = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 
 function write_sty_xml(wb, opts) {
+	if (typeof style_builder != 'undefined' && typeof 'require' != 'undefined') {
+		return style_builder.toXml();
+	}
 	var o = [XML_HEADER, STYLES_XML_ROOT], w;
 	if(wb.SSF && (w = write_numFmts(wb.SSF)) != null) o[o.length] = w;
 	o[o.length] = ('<fonts count="1"><font><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>');
@@ -5963,6 +6000,13 @@ function default_margins(margins, mode) {
 }
 
 function get_cell_style(styles, cell, opts) {
+	if (typeof style_builder != 'undefined') {
+		if (/^\d+$/.exec(cell.s)) { return cell.s}  // if its already an integer index, let it be
+		if (cell.s && (cell.s == +cell.s)) { return cell.s}  // if its already an integer index, let it be
+		var s = cell.s || {};
+		if (cell.z) s.numFmt = cell.z;
+		return style_builder.addStyle(s);
+	}
 	var z = opts.revssf[cell.z != null ? cell.z : "General"];
 	var i = 0x3c, len = styles.length;
 	if(z == null && opts.ssf) {
@@ -5984,6 +6028,36 @@ function get_cell_style(styles, cell, opts) {
 		applyNumberFormat:1
 	};
 	return len;
+}
+
+function get_cell_style_csf(cellXf, styles) {
+
+	if (cellXf) {
+
+		var s = {}
+
+		if (typeof cellXf.numFmtId != undefined)  {
+			s.numFmt = SSF._table[cellXf.numFmtId];
+		}
+
+		if(cellXf.fillId)  {
+			s.fill =  styles.Fills[cellXf.fillId];
+		}
+
+		if (cellXf.fontId) {
+			s.font = styles.Fonts[cellXf.fontId];
+		}
+		if (cellXf.borderId) {
+			s.border = styles.Borders[cellXf.borderId];
+		}
+		if (cellXf.applyAlignment==1) {
+			s.alignment = cellXf.alignment;
+		}
+
+
+		return JSON.parse(JSON.stringify(s));
+	}
+	return null;
 }
 
 function safe_format(p, fmtid, fillid, opts, themes, styles) {
@@ -6013,7 +6087,7 @@ function safe_format(p, fmtid, fillid, opts, themes, styles) {
 	} catch(e) { if(opts.WTF) throw e; }
 	if(!opts.cellStyles) return;
 	if(fillid != null) try {
-		p.s = styles.Fills[fillid];
+		p.s = Object.assign({}, p.s, styles.Fills[fillid]);
 		if (p.s.fgColor && p.s.fgColor.theme && !p.s.fgColor.rgb) {
 			p.s.fgColor.rgb = rgb_tint(themes.themeElements.clrScheme[p.s.fgColor.theme].rgb, p.s.fgColor.tint || 0);
 			if(opts.WTF) p.s.fgColor.raw_rgb = themes.themeElements.clrScheme[p.s.fgColor.theme].rgb;
@@ -6043,6 +6117,7 @@ var colregex = /<(?:\w:)?col\b[^>]*[\/]?>/g;
 var afregex = /<(?:\w:)?autoFilter[^>]*([\/]|>([\s\S]*)<\/(?:\w:)?autoFilter)>/g;
 var marginregex= /<(?:\w:)?pageMargins[^>]*\/>/g;
 var sheetprregex = /<(?:\w:)?sheetPr\b(?:[^>a-z][^>]*)?\/>/;
+var pagesetupregex = /<(?:\w:)?pageSetup[^>]*\/>/g;
 var svsregex = /<(?:\w:)?sheetViews[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetViews)>/;
 
 /* 18.3 Worksheets */
@@ -6106,6 +6181,10 @@ function parse_ws_xml(data, opts, idx, rels, wb, themes, styles) {
 	var margins = data2.match(marginregex);
 	if(margins) s['!margins'] = parse_ws_xml_margins(parsexmltag(margins[0]));
 
+	/* 18.3.1.63 pageSetup CT_PageSetup */
+	var pagesetup = data2.match(pagesetupregex);
+	if(pagesetup) s['!pageSetup'] = parse_ws_xml_pagesetup(parsexmltag(pagesetup[0]));
+
 	if(!s["!ref"] && refguess.e.c >= refguess.s.c && refguess.e.r >= refguess.s.r) s["!ref"] = encode_range(refguess);
 	if(opts.sheetRows > 0 && s["!ref"]) {
 		var tmpref = safe_decode_range(s["!ref"]);
@@ -6167,6 +6246,16 @@ function write_ws_xml_protection(sp) {
 	/* TODO: algorithm */
 	if(sp.password) o.password = crypto_CreatePasswordVerifier_Method1(sp.password).toString(16).toUpperCase();
 	return writextag('sheetProtection', null, o);
+}
+
+function write_ws_xml_pagesetup(setup) {
+	var pageSetup =  writextag('pageSetup', null, {
+		scale: setup.scale || '100',
+		orientation: setup.orientation || 'portrait',
+		horizontalDpi : setup.horizontalDpi || '4294967292',
+		verticalDpi : setup.verticalDpi || '4294967292'
+	});
+	return pageSetup;
 }
 
 function parse_ws_xml_hlinks(s, data, rels) {
@@ -6275,7 +6364,7 @@ function write_ws_xml_sheetviews(ws, opts, idx, wb) {
 }
 
 function write_ws_xml_cell(cell, ref, ws, opts) {
-	if(cell.v === undefined && cell.f === undefined || cell.t === 'z') return "";
+	if(cell.s === undefined && (cell.v === undefined && cell.f === undefined || cell.t === 'z')) return "";
 	var vv = "";
 	var oldt = cell.t, oldv = cell.v;
 	if(cell.t !== "z") switch(cell.t) {
@@ -6406,7 +6495,7 @@ return function parse_ws_xml_data(sdata, s, opts, guess, themes, styles) {
 							p.F = arrayf[i][1];
 			}
 
-			if(tag.t == null && p.v === undefined) {
+			if(tag.t == null && tag.s == null && p.v === undefined) {
 				if(p.f || p.F) {
 					p.v = 0; p.t = "n";
 				} else if(!opts.sheetStubs) continue;
@@ -6419,7 +6508,7 @@ return function parse_ws_xml_data(sdata, s, opts, guess, themes, styles) {
 			switch(p.t) {
 				case 'n':
 					if(p.v == "" || p.v == null) {
-						if(!opts.sheetStubs) continue;
+						if(!opts.sheetStubs && tag.s == null) continue;
 						p.t = 'z';
 					} else p.v = parseFloat(p.v);
 					break;
@@ -6462,6 +6551,9 @@ return function parse_ws_xml_data(sdata, s, opts, guess, themes, styles) {
 			cf = null;
 			if(do_format && tag.s !== undefined) {
 				cf = styles.CellXf[tag.s];
+				if (opts.cellStyles) {
+					p.s = get_cell_style_csf(cf, styles)
+				}
 				if(cf != null) {
 					if(cf.numFmtId != null) fmtid = cf.numFmtId;
 					if(opts.cellStyles) {
@@ -6612,9 +6704,12 @@ ws['!links'].forEach(function(l) {
 	if(ws['!margins'] != null) o[o.length] =  write_ws_xml_margins(ws['!margins']);
 
 	/* pageSetup */
+	if (ws['!pageSetup'] != null) o[o.length] = write_ws_xml_pagesetup(ws['!pageSetup']);
 	/* headerFooter */
 	/* rowBreaks */
+	if (ws['!rowBreaks'] != null) o[o.length] = write_ws_xml_row_breaks(ws['!rowBreaks']);
 	/* colBreaks */
+	if (ws['!colBreaks'] != null) o[o.length] = write_ws_xml_col_breaks(ws['!colBreaks']);
 	/* customProperties */
 	/* cellWatches */
 
@@ -6644,6 +6739,27 @@ ws['!links'].forEach(function(l) {
 
 	if(o.length>1) { o[o.length] = ('</worksheet>'); o[1]=o[1].replace("/>",">"); }
 	return o.join("");
+}
+
+function write_ws_xml_row_breaks(breaks) {
+	console.log("Writing breaks")
+	var brk = [];
+	for (var i=0; i<breaks.length; i++) {
+		var thisBreak = ''+ (breaks[i]);
+		var nextBreak = '' + (breaks[i+1] || '16383');
+		brk.push(writextag('brk', null, {id: thisBreak, max: nextBreak, man: '1'}));
+	}
+	return writextag('rowBreaks', brk.join(' '), {count: brk.length, manualBreakCount: brk.length});
+}
+function write_ws_xml_col_breaks(breaks) {
+	console.log("Writing breaks");
+	var brk = [];
+	for (var i=0; i<breaks.length; i++) {
+		var thisBreak = ''+ (breaks[i]);
+		var nextBreak = '' + (breaks[i+1] || '1048575');
+		brk.push(writextag('brk', null, {id: thisBreak, max: nextBreak, man: '1'}));
+	}
+	return writextag('colBreaks', brk.join(' '), {count: brk.length, manualBreakCount: brk.length});
 }
 RELS.CHART = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart";
 RELS.CHARTEX = "http://schemas.microsoft.com/office/2014/relationships/chartEx";
@@ -8022,6 +8138,7 @@ function write_cfb_ctr(cfb, o) {
 /*global encrypt_agile */
 function write_zip_type(wb, opts) {
 	var o = opts||{};
+	style_builder = new StyleBuilder(opts);
 	var z = write_zip(wb, o);
 	var oopts = {};
 	if(o.compression) oopts.compression = 'DEFLATE';
@@ -8145,6 +8262,7 @@ function resolve_book_type(o) {
 
 function writeFileSync(wb, filename, opts) {
 	var o = opts||{}; o.type = 'file';
+
 	o.file = filename;
 	resolve_book_type(o);
 	return writeSync(wb, o);
