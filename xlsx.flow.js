@@ -13173,9 +13173,9 @@ var hlinkregex = /<(?:\w:)?hyperlink [^>]*>/mg;
 var dimregex = /"(\w*:\w*)"/;
 var colregex = /<(?:\w:)?col\b[^>]*[\/]?>/g;
 var afregex = /<(?:\w:)?autoFilter[^>]*([\/]|>([\s\S]*)<\/(?:\w:)?autoFilter)>/g;
-var marginregex= /<(?:\w:)?pageMargins[^>]*\/>/g;
-var sheetprregex = /<(?:\w:)?sheetPr\b(?:[^>a-z][^>]*)?\/>/;
+var marginregex = /<(?:\w:)?pageMargins[^>]*\/>/g;
 var pagesetupregex = /<(?:\w:)?pageSetup[^>]*\/>/g;
+var sheetprregex = /(<(?:\w+:)?sheetPr(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?sheetPr>/;
 var svsregex = /<(?:\w:)?sheetViews[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetViews)>/;
 
 /* 18.3 Worksheets */
@@ -13197,7 +13197,7 @@ function parse_ws_xml(data/*:?string*/, opts, idx/*:number*/, rels, wb/*:WBWBPro
 
 	/* 18.3.1.82 sheetPr CT_SheetPr */
 	var sheetPr = data1.match(sheetprregex);
-	if(sheetPr) parse_ws_xml_sheetpr(sheetPr[0], s, wb, idx);
+	if(sheetPr) parse_ws_xml_sheetpr(sheetPr, s, wb, idx);
 
 	/* 18.3.1.35 dimension CT_SheetDimension */
 	var ridx = (data1.match(/<(?:\w*:)?dimension/)||{index:-1}).index;
@@ -13268,15 +13268,24 @@ function write_ws_xml_merges(merges/*:Array<Range>*/)/*:string*/ {
 	return o + '</mergeCells>';
 }
 
-/* 18.3.1.82-3 sheetPr CT_ChartsheetPr / CT_SheetPr */
+/* 18.3.1.82 sheetPr CT_ChartsheetPr / CT_SheetPr */
+var psetupprregex = /<(?:\w:)?pageSetUpPr(?:[^>a-z][^>]*)?\/?>/;
 function parse_ws_xml_sheetpr(sheetPr/*:string*/, s, wb/*:WBWBProps*/, idx/*:number*/) {
-	var data = parsexmltag(sheetPr);
+	var data = parsexmltag(sheetPr[1]);
 	if(!wb.Sheets[idx]) wb.Sheets[idx] = {};
 	if(data.codeName) wb.Sheets[idx].CodeName = data.codeName;
+	(sheetPr[2].match(psetupprregex)||[]).forEach(function(r, i) {
+		var data = parsexmltag(r);
+		var pageSetUpPr = {};
+		if(data.autoPageBreaks) pageSetUpPr.autoPageBreaks = parsexmlbool(data.autoPageBreaks);
+		if(data.fitToPage) pageSetUpPr.fitToPage = parsexmlbool(data.fitToPage);
+		wb.Sheets[idx].pageSetUpPr = Object.assign({}, wb.Sheets[idx].pageSetUpPr, pageSetUpPr);
+	});
 }
 function write_ws_xml_sheetpr(ws, wb, idx, opts, o) {
 	var needed = false;
-	var props = {}, payload = null;
+	var pageSetUpPr = wb.Workbook.Sheets[idx].pageSetUpPr;
+	var props = {}, payload = pageSetUpPr && writextag('pageSetUpPr', null, pageSetUpPr) || null;
 	if(opts.bookType !== 'xlsx' && wb.vbaraw) {
 		var cname = wb.SheetNames[idx];
 		try { if(wb.Workbook) cname = wb.Workbook.Sheets[idx].CodeName || cname; } catch(e) {}
@@ -13306,12 +13315,26 @@ function write_ws_xml_protection(sp)/*:string*/ {
 	return writextag('sheetProtection', null, o);
 }
 
+function parse_ws_xml_pagesetup(setup) {
+	var pageSetup = {};
+	["scale", "horizontalDpi", "verticalDpi", "paperSize", "fitToWidth", "fitToHeight"].forEach(function(k) {
+		if(setup[k]) pageSetup[k] = parseInt(setup[k]);
+	});
+	["orientation", "pageOrder"].forEach(function(k) {
+		if(setup[k]) pageSetup[k] = setup[k];
+	});
+	return pageSetup;
+}
 function write_ws_xml_pagesetup(setup) {
 	var pageSetup =  writextag('pageSetup', null, {
 		scale: setup.scale || '100',
 		orientation: setup.orientation || 'portrait',
 		horizontalDpi : setup.horizontalDpi || '4294967292',
-		verticalDpi : setup.verticalDpi || '4294967292'
+		verticalDpi : setup.verticalDpi || '4294967292',
+		paperSize: setup.paperSize || '9',
+		pageOrder: setup.pageOrder || 'downThenDown',
+		fitToWidth: setup.fitToWidth || '0',
+		fitToHeight: setup.fitToHeight || '0'
 	});
 	return pageSetup;
 }
