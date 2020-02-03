@@ -61,6 +61,13 @@ function default_margins(margins/*:Margins*/, mode/*:?string*/) {
 }
 
 function get_cell_style(styles/*:Array<any>*/, cell/*:Cell*/, opts) {
+	if (typeof style_builder != 'undefined') {
+		if (/^\d+$/.exec(cell.s)) { return cell.s}  // if its already an integer index, let it be
+		if (cell.s && (cell.s == +cell.s)) { return cell.s}  // if its already an integer index, let it be
+		var s = cell.s || {};
+		if (cell.z) s.numFmt = cell.z;
+		return style_builder.addStyle(s);
+	}
 	var z = opts.revssf[cell.z != null ? cell.z : "General"];
 	var i = 0x3c, len = styles.length;
 	if(z == null && opts.ssf) {
@@ -82,6 +89,36 @@ function get_cell_style(styles/*:Array<any>*/, cell/*:Cell*/, opts) {
 		applyNumberFormat:1
 	};
 	return len;
+}
+
+function get_cell_style_csf(cellXf, styles) {
+
+	if (cellXf) {
+
+		var s = {}
+
+		if (typeof cellXf.numFmtId != undefined)  {
+			s.numFmt = SSF._table[cellXf.numFmtId];
+		}
+
+		if(cellXf.fillId)  {
+			s.fill =  styles.Fills[cellXf.fillId];
+		}
+
+		if (cellXf.fontId) {
+			s.font = styles.Fonts[cellXf.fontId];
+		}
+		if (cellXf.borderId) {
+			s.border = styles.Borders[cellXf.borderId];
+		}
+		if (cellXf.applyAlignment==1) {
+			s.alignment = cellXf.alignment;
+		}
+
+
+		return JSON.parse(JSON.stringify(s));
+	}
+	return null;
 }
 
 function safe_format(p/*:Cell*/, fmtid/*:number*/, fillid/*:?number*/, opts, themes, styles) {
@@ -111,7 +148,7 @@ function safe_format(p/*:Cell*/, fmtid/*:number*/, fillid/*:?number*/, opts, the
 	} catch(e) { if(opts.WTF) throw e; }
 	if(!opts.cellStyles) return;
 	if(fillid != null) try {
-		p.s = styles.Fills[fillid];
+		p.s = Object.assign({}, p.s, styles.Fills[fillid]);
 		if (p.s.fgColor && p.s.fgColor.theme && !p.s.fgColor.rgb) {
 			p.s.fgColor.rgb = rgb_tint(themes.themeElements.clrScheme[p.s.fgColor.theme].rgb, p.s.fgColor.tint || 0);
 			if(opts.WTF) p.s.fgColor.raw_rgb = themes.themeElements.clrScheme[p.s.fgColor.theme].rgb;

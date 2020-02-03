@@ -13,6 +13,7 @@ function write_cfb_ctr(cfb/*:CFBContainer*/, o/*:WriteOpts*/)/*:any*/ {
 /*:: declare var encrypt_agile:any; */
 function write_zip_type(wb/*:Workbook*/, opts/*:?WriteOpts*/)/*:any*/ {
 	var o = opts||{};
+	style_builder = new StyleBuilder(opts);
 	var z = write_zip(wb, o);
 	var oopts = {};
 	if(o.compression) oopts.compression = 'DEFLATE';
@@ -136,6 +137,7 @@ function resolve_book_type(o/*:WriteFileOpts*/) {
 
 function writeFileSync(wb/*:Workbook*/, filename/*:string*/, opts/*:?WriteFileOpts*/) {
 	var o = opts||{}; o.type = 'file';
+
 	o.file = filename;
 	resolve_book_type(o);
 	return writeSync(wb, o);

@@ -1,7 +1,7 @@
 /* 18.8.5 borders CT_Borders */
 function parse_borders(t, styles, themes, opts) {
 	styles.Borders = [];
-	var border = {};
+	var border = {}, sub_border = {};
 	var pass = false;
 	(t[0].match(tagregex)||[]).forEach(function(x) {
 		var y = parsexmltag(x);
@@ -19,26 +19,51 @@ function parse_borders(t, styles, themes, opts) {
 
 			/* note: not in spec, appears to be CT_BorderPr */
 			case '<left/>': break;
-			case '<left': case '<left>': break;
+			case '<left': case '<left>':
+				sub_border = border.left = {};
+				if (y.style) {
+					sub_border.style = y.style;
+				}
+				break;
 			case '</left>': break;
 
 			/* note: not in spec, appears to be CT_BorderPr */
-			case '<right/>': break;
-			case '<right': case '<right>': break;
+			case '<right/>':
+			case '<right': case '<right>':
+				sub_border = border.right = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</right>': break;
 
 			/* 18.8.43 top CT_BorderPr */
-			case '<top/>': break;
-			case '<top': case '<top>': break;
+			case '<top/>':
+			case '<top': case '<top>':
+				sub_border = border.top = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</top>': break;
 
 			/* 18.8.6 bottom CT_BorderPr */
-			case '<bottom/>': break;
-			case '<bottom': case '<bottom>': break;
+			case '<bottom/>':
+			case '<bottom': case '<bottom>':
+				sub_border = border.bottom = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</bottom>': break;
 
 			/* 18.8.13 diagonal CT_BorderPr */
-			case '<diagonal': case '<diagonal>': case '<diagonal/>': break;
+			case '<diagonal': case '<diagonal>': case '<diagonal/>':
+				sub_border = border.diagonal = {};
+				if (y.style) {
+						sub_border.style = y.style;
+				}
+				break;
 			case '</diagonal>': break;
 
 			/* 18.8.25 horizontal CT_BorderPr */
@@ -59,6 +84,15 @@ function parse_borders(t, styles, themes, opts) {
 
 			/* 18.8.? color CT_Color */
 			case '<color': case '<color>':
+				sub_border.color = {};
+				if (y.theme) sub_border.color.theme = y.theme;
+				if (y.theme && themes.themeElements && themes.themeElements.clrScheme) {
+					sub_border.color.rgb = rgb_tint(themes.themeElements.clrScheme[sub_border.color.theme].rgb, sub_border.color.tint || 0);
+				}
+
+				if (y.tint) sub_border.color.tint = y.tint;
+				if (y.rgb) sub_border.color.rgb = y.rgb;
+				if (y.auto) sub_border.color.auto = y.auto;
 				break;
 			case '<color/>': case '</color>': break;
 
@@ -418,6 +452,9 @@ var STYLES_XML_ROOT = writextag('styleSheet', null, {
 RELS.STY = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
 
 function write_sty_xml(wb/*:Workbook*/, opts)/*:string*/ {
+	if (typeof style_builder != 'undefined' && typeof 'require' != 'undefined') {
+		return style_builder.toXml();
+	}
 	var o = [XML_HEADER, STYLES_XML_ROOT], w;
 	if(wb.SSF && (w = write_numFmts(wb.SSF)) != null) o[o.length] = w;
 	o[o.length] = ('<fonts count="1"><font><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>');
