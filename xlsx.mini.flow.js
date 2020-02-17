@@ -6206,7 +6206,11 @@ var dimregex = /"(\w*:\w*)"/;
 var colregex = /<(?:\w:)?col\b[^>]*[\/]?>/g;
 var afregex = /<(?:\w:)?autoFilter[^>]*([\/]|>([\s\S]*)<\/(?:\w:)?autoFilter)>/g;
 var marginregex = /<(?:\w:)?pageMargins[^>]*\/>/g;
+var printoptionsregex = /<(?:\w:)?printOptions[^>]*\/>/;
 var pagesetupregex = /<(?:\w:)?pageSetup[^>]*\/>/g;
+var headerfooterregex = /(<(?:\w+:)?headerFooter(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?headerFooter>/;
+var rowbreaksregex = /(<(?:\w+:)?rowBreaks(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?rowBreaks>/;
+var colbreaksregex = /(<(?:\w+:)?colBreaks(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?colBreaks>/;
 var sheetprregex = /(<(?:\w+:)?sheetPr(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?sheetPr>/;
 var svsregex = /<(?:\w:)?sheetViews[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetViews)>/;
 
@@ -6271,9 +6275,25 @@ function parse_ws_xml(data/*:?string*/, opts, idx/*:number*/, rels, wb/*:WBWBPro
 	var margins = data2.match(marginregex);
 	if(margins) s['!margins'] = parse_ws_xml_margins(parsexmltag(margins[0]));
 
+	/* 18.3.1.63 printOptions CT_PrintOptions */
+	var printoptions = data2.match(printoptionsregex);
+	if(printoptions) s['!printOptions'] = parse_ws_xml_print_options(parsexmltag(printoptions[0]));
+
 	/* 18.3.1.63 pageSetup CT_PageSetup */
 	var pagesetup = data2.match(pagesetupregex);
 	if(pagesetup) s['!pageSetup'] = parse_ws_xml_pagesetup(parsexmltag(pagesetup[0]));
+
+	/* 18.3.1.46 headerFooter CT_HeaderFooter */
+	var headerfooter = data2.match(headerfooterregex);
+	if(headerfooter) s['!headerFooter'] = parse_ws_xml_header_footer(headerfooter);
+
+	/* 18.3.1.14 colBreaks CT_PageBreak */
+	var colbreaks = data2.match(colbreaksregex);
+	if(colbreaks) s['!colBreaks'] = parse_ws_xml_page_breaks(colbreaks);
+
+	/* 18.3.1.74 rowBreaks CT_PageBreak */
+	var rowbreaks = data2.match(rowbreaksregex);
+	if(rowbreaks) s['!rowBreaks'] = parse_ws_xml_page_breaks(rowbreaks);
 
 	if(!s["!ref"] && refguess.e.c >= refguess.s.c && refguess.e.r >= refguess.s.r) s["!ref"] = encode_range(refguess);
 	if(opts.sheetRows > 0 && s["!ref"]) {
@@ -6347,6 +6367,24 @@ function write_ws_xml_protection(sp)/*:string*/ {
 	return writextag('sheetProtection', null, o);
 }
 
+function parse_ws_xml_print_options(printoptions) {
+	var printOptions = {};
+	['horizontalCentered', 'verticalCentered', 'headings', 'gridLines', 'gridLinesSet'].forEach(function(k) {
+		if(printoptions[k]) printOptions[k] = parsexmlbool(printoptions[k]);
+	});
+	return printOptions;
+}
+function write_ws_xml_print_options(printOptions) {
+	var printoptions = writextag('printOptions', null, {
+		horizontalCentered: printOptions.horizontalCentered || '0',
+		verticalCentered: printOptions.verticalCentered || '0',
+		headings: printOptions.headings || '0',
+		gridLines: printOptions.gridLines || '0',
+		gridLinesSet: printOptions.printOptionsgridLinesSet || '1',
+	});
+	return printoptions;
+}
+
 function parse_ws_xml_pagesetup(setup) {
 	var pageSetup = {};
 	["scale", "horizontalDpi", "verticalDpi", "paperSize", "fitToWidth", "fitToHeight"].forEach(function(k) {
@@ -6358,7 +6396,7 @@ function parse_ws_xml_pagesetup(setup) {
 	return pageSetup;
 }
 function write_ws_xml_pagesetup(setup) {
-	var pageSetup =  writextag('pageSetup', null, {
+	var pageSetup = writextag('pageSetup', null, {
 		scale: setup.scale || '100',
 		orientation: setup.orientation || 'portrait',
 		horizontalDpi : setup.horizontalDpi || '4294967292',
@@ -6369,6 +6407,41 @@ function write_ws_xml_pagesetup(setup) {
 		fitToHeight: setup.fitToHeight || '0'
 	});
 	return pageSetup;
+}
+
+var headerfootertagregex = /(<([a-zA-Z0-9:_-]+)(?:[^>]*)>)([\s\S]*?)<\/\2>/mg;
+function parse_ws_xml_header_footer(headerfooter) {
+	var headerFooter = {};
+
+	var data = parsexmltag(headerfooter[1]);
+	if (data.differentOddEven) headerFooter.differentOddEven = parsexmlbool(data.differentOddEven);
+	if (data.differentFirst)   headerFooter.differentFirst   = parsexmlbool(data.differentFirst);
+	if (data.scaleWithDoc)     headerFooter.scaleWithDoc     = parsexmlbool(data.scaleWithDoc);
+	if (data.alignWithMargins) headerFooter.alignWithMargins = parsexmlbool(data.alignWithMargins);
+
+	while((x = headerfootertagregex.exec(headerfooter[2]))) switch(x[2]) {
+		case 'oddHeader':
+		case 'oddFooter':
+		case 'evenHeader':
+		case 'evenFooter':
+		case 'firstHeader':
+		case 'firstFooter':
+			headerFooter[x[2]] = x[3]; break;
+	}
+	return headerFooter;
+}
+function write_ws_xml_header_footer(headerFooter) {
+	var r = [];
+	['oddHeader', 'oddFooter', 'evenHeader', 'evenFooter', 'firstHeader', 'firstFooter'].map(function(k){
+		if (headerFooter.hasOwnProperty(k)) r.push(writetag(k, headerFooter[k]));
+	});
+
+	var params = {};
+	['differentOddEven', 'differentFirst', 'scaleWithDoc', 'alignWithMargins]'].forEach(function(k){
+		if (headerFooter.hasOwnProperty(k)) params[k] = headerFooter[k];
+	});
+
+	return writextag('headerFooter', r.join(""), params);
 }
 
 function parse_ws_xml_hlinks(s, data/*:Array<string>*/, rels) {
@@ -6816,12 +6889,14 @@ function write_ws_xml(idx/*:number*/, opts, wb/*:Workbook*/, rels)/*:string*/ {
 	delete ws['!links'];
 
 	/* printOptions */
+	if (ws['!printOptions'] != null) o[o.length] = write_ws_xml_print_options(ws['!printOptions']);
 
 	if(ws['!margins'] != null) o[o.length] =  write_ws_xml_margins(ws['!margins']);
 
 	/* pageSetup */
 	if (ws['!pageSetup'] != null) o[o.length] = write_ws_xml_pagesetup(ws['!pageSetup']);
 	/* headerFooter */
+	if (ws['!headerFooter'] != null) o[o.length] = write_ws_xml_header_footer(ws['!headerFooter']);
 	/* rowBreaks */
 	if (ws['!rowBreaks'] != null) o[o.length] = write_ws_xml_row_breaks(ws['!rowBreaks']);
 	/* colBreaks */
@@ -6857,8 +6932,17 @@ function write_ws_xml(idx/*:number*/, opts, wb/*:Workbook*/, rels)/*:string*/ {
 	return o.join("");
 }
 
+var brkregex = /<(?:\w:)?brk(?:[^>a-z][^>]*)?\/?>/;
+function parse_ws_xml_page_breaks(breaks) {
+	var rowBreaks = [];
+    (breaks[2].match(brkregex)||[]).forEach(function(r, i) {
+		var data = parsexmltag(r);
+		if(data.id) rowBreaks.push(parseInt(data.id));
+	});
+	return rowBreaks;
+}
 function write_ws_xml_row_breaks(breaks) {
-	console.log("Writing breaks")
+	console.log("Writing breaks");
 	var brk = [];
 	for (var i=0; i<breaks.length; i++) {
 		var thisBreak = ''+ (breaks[i]);
