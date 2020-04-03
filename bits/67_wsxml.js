@@ -139,7 +139,8 @@ function parse_ws_xml_sheetpr(sheetPr/*:string*/, s, wb/*:WBWBProps*/, idx/*:num
 }
 function write_ws_xml_sheetpr(ws, wb, idx, opts, o) {
 	var needed = false;
-	var pageSetUpPr = wb.Workbook.Sheets[idx].pageSetUpPr;
+	var pageSetUpPr;
+	try { pageSetUpPr = wb.Workbook.Sheets[idx].pageSetUpPr; } catch(e) {};
 	var props = {}, payload = pageSetUpPr && writextag('pageSetUpPr', null, pageSetUpPr) || null;
 	if(opts.bookType !== 'xlsx' && wb.vbaraw) {
 		var cname = wb.SheetNames[idx];

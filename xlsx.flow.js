@@ -9196,7 +9196,7 @@ function parse_cellXfs(t, styles, opts) {
 					xf[cellXF_uint[i]] = parseInt(xf[cellXF_uint[i]], 10);
 				for(i = 0; i < cellXF_bool.length; ++i) if(xf[cellXF_bool[i]])
 					xf[cellXF_bool[i]] = parsexmlbool(xf[cellXF_bool[i]]);
-				if(xf.numFmtId > 0x188) {
+				if(styles.NumberFmt && xf.numFmtId > 0x188) {
 					for(i = 0x188; i > 0x3c; --i) if(styles.NumberFmt[xf.numFmtId] == styles.NumberFmt[i]) { xf.numFmtId = i; break; }
 				}
 				styles.CellXf.push(xf); break;
@@ -13304,7 +13304,8 @@ function parse_ws_xml_sheetpr(sheetPr/*:string*/, s, wb/*:WBWBProps*/, idx/*:num
 }
 function write_ws_xml_sheetpr(ws, wb, idx, opts, o) {
 	var needed = false;
-	var pageSetUpPr = wb.Workbook.Sheets[idx].pageSetUpPr;
+	var pageSetUpPr;
+	try { pageSetUpPr = wb.Workbook.Sheets[idx].pageSetUpPr; } catch(e) {};
 	var props = {}, payload = pageSetUpPr && writextag('pageSetUpPr', null, pageSetUpPr) || null;
 	if(opts.bookType !== 'xlsx' && wb.vbaraw) {
 		var cname = wb.SheetNames[idx];
