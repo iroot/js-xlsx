@@ -272,8 +272,8 @@ Excel 2007, nothing outside of SheetJS or Excel supported the format.
 To promote a format-agnostic view, js-xlsx starts from a pure-JS representation
 that we call the ["Common Spreadsheet Format"](#common-spreadsheet-format).
 Emphasizing a uniform object representation enables new features like format
-conversion (reading an XLSX template and saving as XLS) and circumvents the
-"class trap".  By abstracting the complexities of the various formats, tools
+conversion (reading an XLSX template and saving as XLS) and circumvents the mess
+of classes.  By abstracting the complexities of the various formats, tools
 need not worry about the specific file type!
 
 A simple object representation combined with careful coding practices enables
@@ -1540,6 +1540,7 @@ The exported `read` and `readFile` functions accept an options argument:
 |`password`   | ""      | If defined and file is encrypted, use password **    |
 |`WTF`        | false   | If true, throw errors on unexpected file features ** |
 |`sheets`     |         | If specified, only parse specified sheets **         |
+|`PRN`        | false   | If true, allow parsing of PRN files **               |
 
 - Even if `cellNF` is false, formatted text will be generated and saved to `.w`
 - In some cases, sheets may be parsed even if `bookSheets` is false.
@@ -1563,11 +1564,12 @@ The exported `read` and `readFile` functions accept an options argument:
   new XLSB-compatible blob from the XLS CFB container.
 - `codepage` is applied to BIFF2 - BIFF5 files without `CodePage` records and to
   CSV files without BOM in `type:"binary"`.  BIFF8 XLS always defaults to 1200.
+- `PRN` affects parsing of text files without a common delimiter character.
 - Currently only XOR encryption is supported.  Unsupported error will be thrown
   for files employing other encryption methods.
 - WTF is mainly for development.  By default, the parser will suppress read
   errors on single worksheets, allowing you to read from the worksheets that do
-  parse properly. Setting `WTF:1` forces those errors to be thrown.
+  parse properly. Setting `WTF:true` forces those errors to be thrown.
 
 ### Input Type
 
@@ -1970,17 +1972,20 @@ For the example sheet:
 As an alternative to the `writeFile` CSV type, `XLSX.utils.sheet_to_csv` also
 produces CSV output.  The function takes an options argument:
 
-| Option Name |  Default | Description                                         |
-| :---------- | :------: | :-------------------------------------------------- |
-|`FS`         |  `","`   | "Field Separator"  delimiter between fields         |
-|`RS`         |  `"\n"`  | "Record Separator" delimiter between rows           |
-|`dateNF`     |  FMT 14  | Use specified date format in string output          |
-|`strip`      |  false   | Remove trailing field separators in each record **  |
-|`blankrows`  |  true    | Include blank lines in the CSV output               |
-|`skipHidden` |  false   | Skips hidden rows/columns in the CSV output         |
+| Option Name  |  Default | Description                                        |
+| :----------- | :------: | :------------------------------------------------- |
+|`FS`          |  `","`   | "Field Separator"  delimiter between fields        |
+|`RS`          |  `"\n"`  | "Record Separator" delimiter between rows          |
+|`dateNF`      |  FMT 14  | Use specified date format in string output         |
+|`strip`       |  false   | Remove trailing field separators in each record ** |
+|`blankrows`   |  true    | Include blank lines in the CSV output              |
+|`skipHidden`  |  false   | Skips hidden rows/columns in the CSV output        |
+|`forceQuotes` |  false   | Force quotes around fields                         |
 
 - `strip` will remove trailing commas from each line under default `FS/RS`
 - `blankrows` must be set to `false` to skip blank lines.
+- Fields containing the record or field separator will automatically be wrapped
+  in double quotes; `forceQuotes` forces all cells to be wrapped in quotes.
 
 
 For the example sheet:
