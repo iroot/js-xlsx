@@ -13605,7 +13605,7 @@ function parse_ws_xml_header_footer(headerfooter) {
 		case 'evenFooter':
 		case 'firstHeader':
 		case 'firstFooter':
-			headerFooter[x[2]] = x[3]; break;
+			headerFooter[x[2]] = utf8read(x[3]); break;
 	}
 	return headerFooter;
 }
