@@ -13611,22 +13611,41 @@ function write_ws_xml_autofilter(data, ws, wb, idx) {
 
 /* 18.3.1.88 sheetViews CT_SheetViews */
 /* 18.3.1.87 sheetView CT_SheetView */
-var sviewregex = /<(?:\w:)?sheetView(?:[^>a-z][^>]*)?\/?>/;
+var sviewregex = /<(?:\w:)?sheetView[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetView)>/g;
 function parse_ws_xml_sheetviews(data, wb) {
 	if(!wb.Views) wb.Views = [{}];
 	(data.match(sviewregex)||[]).forEach(function(r, i) {
-		var tag = parsexmltag(r);
 		// $FlowIgnore
 		if(!wb.Views[i]) wb.Views[i] = {};
-		// $FlowIgnore
-		if(parsexmlbool(tag.rightToLeft)) wb.Views[i].RTL = true;
+		(r.match(tagregex)||[]).forEach(function(t) {
+			var tag = parsexmltag(t);
+			switch(tag[0]) {
+				case '<sheetView':
+					// $FlowIgnore
+					if(parsexmlbool(tag.rightToLeft)) wb.Views[i].RTL = true;
+					break;
+				case '<pane':
+					var pane = {};
+					if (tag.activePane) pane.activePane = tag.activePane;
+					if (tag.state) pane.state = tag.state;
+					if (tag.topLeftCell) pane.topLeftCell = tag.topLeftCell;
+					if (tag.xSplit) pane.xSplit = tag.xSplit;
+					if (tag.ySplit) pane.ySplit = tag.ySplit;
+					wb.Views[i].pane = pane;
+					break;
+			}
+		});
 	});
 }
 function write_ws_xml_sheetviews(ws, opts, idx, wb) {
 	var sview = ({workbookViewId:"0"});
+	var views = (((wb||{}).Workbook||{}).Views||[]);
 	// $FlowIgnore
-	if((((wb||{}).Workbook||{}).Views||[])[0]) sview.rightToLeft = wb.Workbook.Views[0].RTL ? "1" : "0";
-	return writextag("sheetViews", writextag("sheetView", null, sview), {});
+	if(views[0]) sview.rightToLeft = wb.Workbook.Views[0].RTL ? "1" : "0";
+	var tags = views.map(function(v) {
+		if (v.pane) return writextag('pane', null, v.pane);
+	});
+	return writextag("sheetViews", writextag("sheetView", tags.join(), sview), {});
 }
 
 function write_ws_xml_cell(cell, ref, ws, opts) {
