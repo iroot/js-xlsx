@@ -2,7 +2,8 @@
 var StyleBuilder = function (options) {
 	var customNumFmtId = 164;
 
-	var table_fmt = SSF.get_table();
+	var table_fmt = {};
+	SSF.init_table(table_fmt);
 	var fmt_table = {};
 
 	for (var idx in table_fmt) {
