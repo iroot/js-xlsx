@@ -14,7 +14,7 @@ var pagesetupregex = /<(?:\w:)?pageSetup[^>]*\/>/g;
 var headerfooterregex = /(<(?:\w+:)?headerFooter(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?headerFooter>/;
 var rowbreaksregex = /(<(?:\w+:)?rowBreaks(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?rowBreaks>/;
 var colbreaksregex = /(<(?:\w+:)?colBreaks(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?colBreaks>/;
-var sheetprregex = /(<(?:\w+:)?sheetPr(?:[^>]*)>)([\s\S]*?)<\/(?:\w+:)?sheetPr>/;
+var sheetprregex = /<(?:\w+:)?sheetPr\b(?:[^\/>]*)(?:\/>|>([\s\S]*?)<\/(?:\w+:)?sheetPr>)/;
 var svsregex = /<(?:\w:)?sheetViews[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetViews)>/;
 
 /* 18.3 Worksheets */
@@ -47,7 +47,7 @@ function parse_ws_xml(data/*:?string*/, opts, idx/*:number*/, rels, wb/*:WBWBPro
 
 	/* 18.3.1.88 sheetViews CT_SheetViews */
 	var svs = data1.match(svsregex);
-	if(svs && svs[1]) parse_ws_xml_sheetviews(svs[1], wb);
+	if(svs && svs[1]) parse_ws_xml_sheetviews(svs[1], wb, idx);
 
 	/* 18.3.1.17 cols CT_Cols */
 	var columns/*:Array<ColInfo>*/ = [];
@@ -126,10 +126,10 @@ function write_ws_xml_merges(merges/*:Array<Range>*/)/*:string*/ {
 /* 18.3.1.82 sheetPr CT_ChartsheetPr / CT_SheetPr */
 var psetupprregex = /<(?:\w:)?pageSetUpPr(?:[^>a-z][^>]*)?\/?>/;
 function parse_ws_xml_sheetpr(sheetPr/*:string*/, s, wb/*:WBWBProps*/, idx/*:number*/) {
-	var data = parsexmltag(sheetPr[1]);
+	var data = parsexmltag(sheetPr[0]);
 	if(!wb.Sheets[idx]) wb.Sheets[idx] = {};
 	if(data.codeName) wb.Sheets[idx].CodeName = unescapexml(utf8read(data.codeName));
-	(sheetPr[2].match(psetupprregex)||[]).forEach(function(r, i) {
+	(sheetPr[1]&&sheetPr[1].match(psetupprregex)||[]).forEach(function(r, i) {
 		var data = parsexmltag(r);
 		var pageSetUpPr = {};
 		if(data.autoPageBreaks) pageSetUpPr.autoPageBreaks = parsexmlbool(data.autoPageBreaks);
@@ -346,11 +346,12 @@ function write_ws_xml_autofilter(data, ws, wb, idx)/*:string*/ {
 /* 18.3.1.88 sheetViews CT_SheetViews */
 /* 18.3.1.87 sheetView CT_SheetView */
 var sviewregex = /<(?:\w:)?sheetView[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetView)>/g;
-function parse_ws_xml_sheetviews(data, wb) {
+function parse_ws_xml_sheetviews(data, wb/*:WBWBProps*/, idx/*:number*/) {
 	if(!wb.Views) wb.Views = [{}];
-	(data.match(sviewregex)||[]).forEach(function(r, i) {
+	(data.match(sviewregex)||[]).forEach(function(r/*:string*/, i/*:number*/) {
 		// $FlowIgnore
 		if(!wb.Views[i]) wb.Views[i] = {};
+		if(!wb.Views[idx]) wb.Views[idx] = {};
 		(r.match(tagregex)||[]).forEach(function(t) {
 			var tag = parsexmltag(t);
 			switch(tag[0]) {
@@ -365,7 +366,7 @@ function parse_ws_xml_sheetviews(data, wb) {
 					if (tag.topLeftCell) pane.topLeftCell = tag.topLeftCell;
 					if (tag.xSplit) pane.xSplit = tag.xSplit;
 					if (tag.ySplit) pane.ySplit = tag.ySplit;
-					wb.Views[i].pane = pane;
+					wb.Views[idx].pane = pane;
 					break;
 			}
 		});
@@ -375,11 +376,10 @@ function write_ws_xml_sheetviews(ws, opts, idx, wb) {
 	var sview = ({workbookViewId:"0"});
 	var views = (((wb||{}).Workbook||{}).Views||[]);
 	// $FlowIgnore
-	if(views[0]) sview.rightToLeft = wb.Workbook.Views[0].RTL ? "1" : "0";
-	var tags = views.map(function(v) {
-		if (v.pane) return writextag('pane', null, v.pane);
-	});
-	return writextag("sheetViews", writextag("sheetView", tags.join(), sview), {});
+	if(views[0]) sview.rightToLeft = views[0].RTL ? "1" : "0";
+	var pane = views[idx].pane;
+	var tag = pane ? writextag('pane', null, pane) : '';
+	return writextag("sheetViews", writextag("sheetView", tag, sview), {});
 }
 
 function write_ws_xml_cell(cell/*:Cell*/, ref, ws, opts/*::, idx, wb*/)/*:string*/ {
