@@ -7355,7 +7355,7 @@ function write_ws_xml_sheetpr(ws, wb, idx, opts, o) {
 		var cname = wb.SheetNames[idx];
 		try { if(wb.Workbook) cname = wb.Workbook.Sheets[idx].CodeName || cname; } catch(e) {}
 		needed = true;
-		props.codeName = utf8write(escapexml(cname));
+		props.codeName = unescapexml(cname);
 	}
 
 	if(ws && ws["!outline"]) {
