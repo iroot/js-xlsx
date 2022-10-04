@@ -41,6 +41,18 @@ function parse_VtStringBase(blob, stringType, pad) {
 function parse_VtString(blob, t/*:number*/, pad/*:?boolean*/) { return parse_VtStringBase(blob, t, pad === false ? 0: 4); }
 function parse_VtUnalignedString(blob, t/*:number*/) { if(!t) throw new Error("VtUnalignedString must have positive length"); return parse_VtStringBase(blob, t, 0); }
 
+/* [MS-OSHARED] 2.3.3.1.7 VtVecLpwstrValue */
+function parse_VtVecLpwstrValue(blob)/*:Array<string>*/ {
+	var length = blob.read_shift(4);
+	var ret/*:Array<string>*/ = [];
+	for(var i = 0; i != length; ++i) {
+		var start = blob.l;
+		ret[i] = blob.read_shift(0, 'lpwstr').replace(chr0,'');
+		if((blob.l - start) & 0x02) blob.l += 2;
+	}
+	return ret;
+}
+
 /* [MS-OSHARED] 2.3.3.1.9 VtVecUnalignedLpstrValue */
 function parse_VtVecUnalignedLpstrValue(blob)/*:Array<string>*/ {
 	var length = blob.read_shift(4);
@@ -49,14 +61,12 @@ function parse_VtVecUnalignedLpstrValue(blob)/*:Array<string>*/ {
 	return ret;
 }
 
-/* [MS-OSHARED] 2.3.3.1.10 VtVecUnalignedLpstr */
-function parse_VtVecUnalignedLpstr(blob)/*:Array<string>*/ {
-	return parse_VtVecUnalignedLpstrValue(blob);
-}
 
 /* [MS-OSHARED] 2.3.3.1.13 VtHeadingPair */
 function parse_VtHeadingPair(blob) {
+	var start = blob.l;
 	var headingString = parse_TypedPropertyValue(blob, VT_USTR);
+	if(blob[blob.l] == 0x00 && blob[blob.l+1] == 0x00 && ((blob.l - start) & 0x02)) blob.l += 2;
 	var headerParts = parse_TypedPropertyValue(blob, VT_I4);
 	return [headingString, headerParts];
 }
@@ -65,14 +75,8 @@ function parse_VtHeadingPair(blob) {
 function parse_VtVecHeadingPairValue(blob) {
 	var cElements = blob.read_shift(4);
 	var out = [];
-	for(var i = 0; i != cElements / 2; ++i) out.push(parse_VtHeadingPair(blob));
+	for(var i = 0; i < cElements / 2; ++i) out.push(parse_VtHeadingPair(blob));
 	return out;
-}
-
-/* [MS-OSHARED] 2.3.3.1.15 VtVecHeadingPair */
-function parse_VtVecHeadingPair(blob) {
-	// NOTE: When invoked, wType & padding were already consumed
-	return parse_VtVecHeadingPairValue(blob);
 }
 
 /* [MS-OLEPS] 2.18.1 Dictionary (uses 2.17, 2.16) */
@@ -113,7 +117,7 @@ function parse_TypedPropertyValue(blob, type/*:number*/, _opts)/*:any*/ {
 	var t = blob.read_shift(2), ret, opts = _opts||{};
 	blob.l += 2;
 	if(type !== VT_VARIANT)
-	if(t !== type && VT_CUSTOM.indexOf(type)===-1) throw new Error('Expected type ' + type + ' saw ' + t);
+	if(t !== type && VT_CUSTOM.indexOf(type)===-1 && !((type & 0xFFFE) == 0x101E && (t & 0xFFFE) == 0x101E)) throw new Error('Expected type ' + type + ' saw ' + t);
 	switch(type === VT_VARIANT ? t : type) {
 		case 0x02 /*VT_I2*/: ret = blob.read_shift(2, 'i'); if(!opts.raw) blob.l += 2; return ret;
 		case 0x03 /*VT_I4*/: ret = blob.read_shift(4, 'i'); return ret;
@@ -126,8 +130,10 @@ function parse_TypedPropertyValue(blob, type/*:number*/, _opts)/*:any*/ {
 		case 0x47 /*VT_CF*/: return parse_ClipboardData(blob);
 		case 0x50 /*VT_STRING*/: return parse_VtString(blob, t, !opts.raw).replace(chr0,'');
 		case 0x51 /*VT_USTR*/: return parse_VtUnalignedString(blob, t/*, 4*/).replace(chr0,'');
-		case 0x100C /*VT_VECTOR|VT_VARIANT*/: return parse_VtVecHeadingPair(blob);
-		case 0x101E /*VT_LPSTR*/: return parse_VtVecUnalignedLpstr(blob);
+		case 0x100C /*VT_VECTOR|VT_VARIANT*/: return parse_VtVecHeadingPairValue(blob);
+		case 0x101E /*VT_VECTOR|VT_LPSTR*/:
+		case 0x101F /*VT_VECTOR|VT_LPWSTR*/:
+			return t == 0x101F ? parse_VtVecLpwstrValue(blob) : parse_VtVecUnalignedLpstrValue(blob);
 		default: throw new Error("TypedPropertyValue unrecognized type " + type + " " + t);
 	}
 }
@@ -179,6 +185,7 @@ function parse_PropertySet(blob, PIDSI) {
 			if(fail) throw new Error("Read Error: Expected address " + Props[i][1] + ' at ' + blob.l + ' :' + i);
 		}
 		if(PIDSI) {
+			if(Props[i][0] == 0 && Props.length > i+1 && Props[i][1] == Props[i+1][1]) continue; // R9
 			var piddsi = PIDSI[Props[i][0]];
 			PropH[piddsi.n] = parse_TypedPropertyValue(blob, piddsi.t, {raw:true});
 			if(piddsi.p === 'version') PropH[piddsi.n] = String(PropH[piddsi.n] >> 16) + "." + ("0000" + String(PropH[piddsi.n] & 0xFFFF)).slice(-4);
@@ -242,7 +249,7 @@ function parse_PropertySet(blob, PIDSI) {
 	blob.l = start_addr + size; /* step ahead to skip padding */
 	return PropH;
 }
-var XLSPSSkip = [ "CodePage", "Thumbnail", "_PID_LINKBASE", "_PID_HLINKS", "SystemIdentifier", "FMTID" ].concat(PseudoPropsPairs);
+var XLSPSSkip = [ "CodePage", "Thumbnail", "_PID_LINKBASE", "_PID_HLINKS", "SystemIdentifier", "FMTID" ];
 function guess_property_type(val/*:any*/)/*:number*/ {
 	switch(typeof val) {
 		case "boolean": return 0x0B;
@@ -286,7 +293,7 @@ function write_PropertySet(entries, RE, PIDSI) {
 
 	for(i = 0; i < entries.length; ++i) {
 		if(RE && !RE[entries[i][0]]) continue;
-		if(XLSPSSkip.indexOf(entries[i][0]) > -1) continue;
+		if(XLSPSSkip.indexOf(entries[i][0]) > -1 || PseudoPropsPairs.indexOf(entries[i][0]) > -1) continue;
 		if(entries[i][1] == null) continue;
 
 		var val = entries[i][1], idx = 0;
@@ -403,7 +410,7 @@ function parse_Bes(blob/*::, length*/) {
 }
 function write_Bes(v, t/*:string*/, o) {
 	if(!o) o = new_buf(2);
-	o.write_shift(1, +v);
+	o.write_shift(1, ((t == 'e') ? +v : +!!v));
 	o.write_shift(1, ((t == 'e') ? 1 : 0));
 	return o;
 }
@@ -523,16 +530,17 @@ function parse_URLMoniker(blob/*::, length, opts*/) {
 
 /* [MS-OSHARED] 2.3.7.8 FileMoniker TODO: all fields */
 function parse_FileMoniker(blob/*::, length*/) {
-	blob.l += 2; //var cAnti = blob.read_shift(2);
+	var cAnti = blob.read_shift(2);
+	var preamble = ""; while(cAnti-- > 0) preamble += "../";
 	var ansiPath = blob.read_shift(0, 'lpstr-ansi');
 	blob.l += 2; //var endServer = blob.read_shift(2);
 	if(blob.read_shift(2) != 0xDEAD) throw new Error("Bad FileMoniker");
 	var sz = blob.read_shift(4);
-	if(sz === 0) return ansiPath.replace(/\\/g,"/");
+	if(sz === 0) return preamble + ansiPath.replace(/\\/g,"/");
 	var bytes = blob.read_shift(4);
 	if(blob.read_shift(2) != 3) throw new Error("Bad FileMoniker");
 	var unicodePath = blob.read_shift(bytes>>1, 'utf16le').replace(chr0,"");
-	return unicodePath;
+	return preamble + unicodePath;
 }
 
 /* [MS-OSHARED] 2.3.7.2 HyperlinkMoniker TODO: all the monikers */
@@ -549,6 +557,13 @@ function parse_HyperlinkMoniker(blob, length) {
 function parse_HyperlinkString(blob/*::, length*/) {
 	var len = blob.read_shift(4);
 	var o = len > 0 ? blob.read_shift(len, 'utf16le').replace(chr0, "") : "";
+	return o;
+}
+function write_HyperlinkString(str/*:string*/, o) {
+	if(!o) o = new_buf(6 + str.length * 2);
+	o.write_shift(4, 1 + str.length);
+	for(var i = 0; i < str.length; ++i) o.write_shift(2, str.charCodeAt(i));
+	o.write_shift(2, 0);
 	return o;
 }
 
@@ -571,6 +586,7 @@ function parse_Hyperlink(blob, length)/*:Hyperlink*/ {
 	var target = targetFrameName||moniker||oleMoniker||"";
 	if(target && Loc) target+="#"+Loc;
 	if(!target) target = "#" + Loc;
+	if((flags & 0x0002) && target.charAt(0) == "/" && target.charAt(1) != "/") target = "file://" + target;
 	var out = ({Target:target}/*:any*/);
 	if(guid) out.guid = guid;
 	if(fileTime) out.time = fileTime;
@@ -580,29 +596,31 @@ function parse_Hyperlink(blob, length)/*:Hyperlink*/ {
 function write_Hyperlink(hl) {
 	var out = new_buf(512), i = 0;
 	var Target = hl.Target;
-	var F = Target.indexOf("#") > -1 ? 0x1f : 0x17;
+	if(Target.slice(0,7) == "file://") Target = Target.slice(7);
+	var hashidx = Target.indexOf("#");
+	var F = hashidx > -1 ? 0x1f : 0x17;
 	switch(Target.charAt(0)) { case "#": F=0x1c; break; case ".": F&=~2; break; }
 	out.write_shift(4,2); out.write_shift(4, F);
 	var data = [8,6815827,6619237,4849780,83]; for(i = 0; i < data.length; ++i) out.write_shift(4, data[i]);
 	if(F == 0x1C) {
 		Target = Target.slice(1);
-		out.write_shift(4, Target.length + 1);
-		for(i = 0; i < Target.length; ++i) out.write_shift(2, Target.charCodeAt(i));
-		out.write_shift(2, 0);
+		write_HyperlinkString(Target, out);
 	} else if(F & 0x02) {
 		data = "e0 c9 ea 79 f9 ba ce 11 8c 82 00 aa 00 4b a9 0b".split(" ");
 		for(i = 0; i < data.length; ++i) out.write_shift(1, parseInt(data[i], 16));
-		out.write_shift(4, 2*(Target.length + 1));
-		for(i = 0; i < Target.length; ++i) out.write_shift(2, Target.charCodeAt(i));
+		var Pretarget = hashidx > -1 ? Target.slice(0, hashidx) : Target;
+		out.write_shift(4, 2*(Pretarget.length + 1));
+		for(i = 0; i < Pretarget.length; ++i) out.write_shift(2, Pretarget.charCodeAt(i));
 		out.write_shift(2, 0);
+		if(F & 0x08) write_HyperlinkString(hashidx > -1 ? Target.slice(hashidx+1): "", out);
 	} else {
 		data = "03 03 00 00 00 00 00 00 c0 00 00 00 00 00 00 46".split(" ");
 		for(i = 0; i < data.length; ++i) out.write_shift(1, parseInt(data[i], 16));
 		var P = 0;
 		while(Target.slice(P*3,P*3+3)=="../"||Target.slice(P*3,P*3+3)=="..\\") ++P;
 		out.write_shift(2, P);
-		out.write_shift(4, Target.length + 1);
-		for(i = 0; i < Target.length; ++i) out.write_shift(1, Target.charCodeAt(i) & 0xFF);
+		out.write_shift(4, Target.length - 3 * P + 1);
+		for(i = 0; i < Target.length - 3 * P; ++i) out.write_shift(1, Target.charCodeAt(i + 3 * P) & 0xFF);
 		out.write_shift(1, 0);
 		out.write_shift(2, 0xFFFF);
 		out.write_shift(2, 0xDEAD);

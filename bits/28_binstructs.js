@@ -1,3 +1,6 @@
+function parse_Int32LE(data) {
+	return data.read_shift(4, 'i');
+}
 function write_UInt32LE(x/*:number*/, o) {
 	if (!o) o = new_buf(4);
 	o.write_shift(4, x);
@@ -88,6 +91,19 @@ function write_XLSBCell(cell/*:any*/, o/*:?Block*/) {
 	return o;
 }
 
+/* Short XLSB Cell does not include column */
+function parse_XLSBShortCell(data)/*:any*/ {
+	var iStyleRef = data.read_shift(2);
+	iStyleRef += data.read_shift(1) <<16;
+	data.l++; //var fPhShow = data.read_shift(1);
+	return { c:-1, iStyleRef: iStyleRef };
+}
+function write_XLSBShortCell(cell/*:any*/, o/*:?Block*/) {
+	if(o == null) o = new_buf(4);
+	o.write_shift(3, cell.iStyleRef || cell.s);
+	o.write_shift(1, 0); /* fPhShow */
+	return o;
+}
 
 /* [MS-XLSB] 2.5.21 */
 var parse_XLSBCodeName = parse_XLWideString;
@@ -119,8 +135,7 @@ function parse_RkNumber(data)/*:number*/ {
 	var b = data.slice(data.l, data.l + 4);
 	var fX100 = (b[0] & 1), fInt = (b[0] & 2);
 	data.l += 4;
-	b[0] &= 0xFC; // b[0] &= ~3;
-	var RK = fInt === 0 ? __double([0, 0, 0, 0, b[0], b[1], b[2], b[3]], 0) : __readInt32LE(b, 0) >> 2;
+	var RK = fInt === 0 ? __double([0, 0, 0, 0, (b[0] & 0xFC), b[1], b[2], b[3]], 0) : __readInt32LE(b, 0) >> 2;
 	return fX100 ? (RK / 100) : RK;
 }
 function write_RkNumber(data/*:number*/, o) {

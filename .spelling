@@ -1,5 +1,6 @@
 # xlsx.js (C) 2013-present SheetJS -- http://sheetjs.com
 SheetJS
+sheetjs
 js-xlsx
 xls
 xlsb
@@ -15,6 +16,7 @@ OData
 OpenDocument
 OpenFormula
 PivotTable
+PivotTables
 Quattro
 SpreadsheetML
 Unhide
@@ -34,29 +36,48 @@ tooltips
 Browserify
 CDNjs
 CommonJS
+Deno
 Ethercalc
 ExtendScript
+InDesign
 IndexedDB
 JavaScriptCore
 LocalStorage
+NestJS
 NPM
-Nuxt.js
+Nuxt
+PhantomJS
+Photoshop
 Redis
 RequireJS
 Rollup
 SessionStorage
 SQLite
 SystemJS
+Vite
 VueJS
+WebKit
 WebSQL
+WK_
 iOS
+iWork
 nodejs
+node.js
 npm
 unpkg
 webpack
 weex
 
 # Other terms
+1.x
+2.x
+3.x
+4.x
+5.x
+6.x
+7.x
+8.x
+9.x
 ActiveX
 APIs
 ArrayBuffer
@@ -66,6 +87,7 @@ FileReader
 JS
 NoSQL
 README
+UTF-8
 UTF-16
 VBScript
 XHR
@@ -73,30 +95,36 @@ XMLHttpRequest
 bundler
 bundlers
 cleanroom
+codepage
 config
 customizable
 datagrid
+dataset
 deduplication
 destructuring
 embeddable
+encodings
 filesystem
 globals
 javascript
+lifecycle
 metadata
 natively
 pre-built
 pre-generated
 prepend
 prepended
+programmatically
 repo
 runtime
 serverless
 submodule
 transpiled
-node.js
+utils
 commonjs
 async
 uncheck
+vendoring
 
  - demos/altjs/README.md
 ChakraCore
@@ -131,6 +159,7 @@ storages
 
  - demos/extendscript/README.md
 Photoshop
+InDesign
 minifier
 
  - demos/function/README.md

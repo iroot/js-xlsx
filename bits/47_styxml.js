@@ -231,7 +231,7 @@ function parse_fonts(t, styles, themes, opts) {
 					font.color.index = parseInt(y.indexed, 10);
 					var icv = XLSIcv[font.color.index];
 					if(font.color.index == 81) icv = XLSIcv[1];
-					if(!icv) throw new Error(x);
+					if(!icv) icv = XLSIcv[1]; //throw new Error(x); // note: 206 is valid
 					font.color.rgb = icv[0].toString(16) + icv[1].toString(16) + icv[2].toString(16);
 				} else if(y.theme) {
 					font.color.theme = parseInt(y.theme, 10);
@@ -262,8 +262,8 @@ function parse_fonts(t, styles, themes, opts) {
 /* 18.8.31 numFmts CT_NumFmts */
 function parse_numFmts(t, styles, opts) {
 	styles.NumberFmt = [];
-	var k/*Array<number>*/ = (keys(SSF._table)/*:any*/);
-	for(var i=0; i < k.length; ++i) styles.NumberFmt[k[i]] = SSF._table[k[i]];
+	var k/*Array<number>*/ = (keys(table_fmt)/*:any*/);
+	for(var i=0; i < k.length; ++i) styles.NumberFmt[k[i]] = table_fmt[k[i]];
 	var m = t[0].match(tagregex);
 	if(!m) return;
 	for(i=0; i < m.length; ++i) {
@@ -278,7 +278,7 @@ function parse_numFmts(t, styles, opts) {
 						for(j = 0x188; j > 0x3c; --j) if(styles.NumberFmt[j] == null) break;
 						styles.NumberFmt[j] = f;
 					}
-					SSF.load(f,j);
+					SSF__load(f,j);
 				}
 			} break;
 			case '</numFmt>': break;
@@ -318,7 +318,7 @@ function parse_cellXfs(t, styles, opts) {
 					xf[cellXF_uint[i]] = parseInt(xf[cellXF_uint[i]], 10);
 				for(i = 0; i < cellXF_bool.length; ++i) if(xf[cellXF_bool[i]])
 					xf[cellXF_bool[i]] = parsexmlbool(xf[cellXF_bool[i]]);
-				if(xf.numFmtId > 0x188) {
+				if(styles.NumberFmt && xf.numFmtId > 0x188) {
 					for(i = 0x188; i > 0x3c; --i) if(styles.NumberFmt[xf.numFmtId] == styles.NumberFmt[i]) { xf.numFmtId = i; break; }
 				}
 				styles.CellXf.push(xf); break;
@@ -369,7 +369,7 @@ function write_cellXfs(cellXfs)/*:string*/ {
 }
 
 /* 18.8 Styles CT_Stylesheet*/
-var parse_sty_xml= (function make_pstyx() {
+var parse_sty_xml= /*#__PURE__*/(function make_pstyx() {
 var numFmtRegex = /<(?:\w+:)?numFmts([^>]*)>[\S\s]*?<\/(?:\w+:)?numFmts>/;
 var cellXfRegex = /<(?:\w+:)?cellXfs([^>]*)>[\S\s]*?<\/(?:\w+:)?cellXfs>/;
 var fillsRegex = /<(?:\w+:)?fills([^>]*)>[\S\s]*?<\/(?:\w+:)?fills>/;
@@ -410,15 +410,11 @@ return function parse_sty_xml(data, themes, opts) {
 };
 })();
 
-var STYLES_XML_ROOT = writextag('styleSheet', null, {
-	'xmlns': XMLNS.main[0],
-	'xmlns:vt': XMLNS.vt
-});
-
-RELS.STY = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles";
-
 function write_sty_xml(wb/*:Workbook*/, opts)/*:string*/ {
-	var o = [XML_HEADER, STYLES_XML_ROOT], w;
+	var o = [XML_HEADER, writextag('styleSheet', null, {
+		'xmlns': XMLNS_main[0],
+		'xmlns:vt': XMLNS.vt
+	})], w;
 	if(wb.SSF && (w = write_numFmts(wb.SSF)) != null) o[o.length] = w;
 	o[o.length] = ('<fonts count="1"><font><sz val="12"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>');
 	o[o.length] = ('<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>');

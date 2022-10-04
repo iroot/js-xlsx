@@ -1,16 +1,23 @@
 /* index.d.ts (C) 2015-present SheetJS and contributors */
 // TypeScript Version: 2.2
-import * as CFB from "cfb";
-import * as SSF from "ssf";
+// import * as CFB from "cfb";
+// import * as SSF from "ssf";
 
 /** Version string */
 export const version: string;
 
 /** SSF Formatter Library */
-export { SSF };
+// export { SSF };
+export const SSF: any;
 
 /** CFB Library */
-export { CFB };
+// export { CFB };
+export const CFB: any;
+
+/** ESM ONLY! Set internal `fs` instance */
+export function set_fs(fs: any): void;
+/** ESM ONLY! Set internal codepage tables */
+export function set_cptable(cptable: any): void;
 
 /** NODE ONLY! Attempts to read filename and parse */
 export function readFile(filename: string, opts?: ParsingOptions): WorkBook;
@@ -18,8 +25,15 @@ export function readFile(filename: string, opts?: ParsingOptions): WorkBook;
 export function read(data: any, opts?: ParsingOptions): WorkBook;
 /** Attempts to write or download workbook data to file */
 export function writeFile(data: WorkBook, filename: string, opts?: WritingOptions): any;
+/** Attempts to write or download workbook data to XLSX file */
+export function writeFileXLSX(data: WorkBook, filename: string, opts?: WritingOptions): any;
+/** Attempts to write or download workbook data to file asynchronously */
+type CBFunc = () => void;
+export function writeFileAsync(filename: string, data: WorkBook, opts: WritingOptions | CBFunc, cb?: CBFunc): any;
 /** Attempts to write the workbook data */
-export function write(data: WorkBook, opts?: WritingOptions): any;
+export function write(data: WorkBook, opts: WritingOptions): any;
+/** Attempts to write the workbook data as XLSX */
+export function writeXLSX(data: WorkBook, opts: WritingOptions): any;
 
 /** Utility Functions */
 export const utils: XLSX$Utils;
@@ -130,7 +144,15 @@ export interface ParsingOptions extends CommonOptions {
     /** Input data encoding */
     type?: 'base64' | 'binary' | 'buffer' | 'file' | 'array' | 'string';
 
-    /** Default codepage */
+    /**
+     * Default codepage for legacy files
+     *
+     * This requires encoding support to be loaded.  It is automatically loaded
+     * in `xlsx.full.min.js` and in CommonJS / Extendscript, but an extra step
+     * is required in React / Angular / Webpack ESM deployments.
+     *
+     * Check the relevant guide https://docs.sheetjs.com/docs/getting-started/
+     */
     codepage?: number;
 
     /**
@@ -159,6 +181,9 @@ export interface ParsingOptions extends CommonOptions {
 
     /** Override default date format (code 14) */
     dateNF?: string;
+
+    /** Field Separator ("Delimiter" override) */
+    FS?: string;
 
     /**
      * If >0, read the first sheetRows rows
@@ -196,11 +221,24 @@ export interface ParsingOptions extends CommonOptions {
     /** If true, plaintext parsing will not parse values */
     raw?: boolean;
 
+    /** If true, preserve _xlfn. prefixes in formula function names */
+    xlfn?: boolean;
+
     dense?: boolean;
+
+    PRN?: boolean;
+}
+
+export interface SheetOption {
+  /**
+   * Name of Worksheet (for single-sheet formats)
+   * @default ''
+   */
+  sheet?: string;
 }
 
 /** Options for write and writeFile */
-export interface WritingOptions extends CommonOptions {
+export interface WritingOptions extends CommonOptions, SheetOption {
     /** Output data encoding */
     type?: 'base64' | 'binary' | 'buffer' | 'file' | 'array' | 'string';
 
@@ -217,12 +255,6 @@ export interface WritingOptions extends CommonOptions {
     bookType?: BookType;
 
     /**
-     * Name of Worksheet (for single-sheet formats)
-     * @default ''
-     */
-    sheet?: string;
-
-    /**
      * Use ZIP compression for ZIP-based formats
      * @default false
      */
@@ -236,6 +268,20 @@ export interface WritingOptions extends CommonOptions {
 
     /** Override workbook properties on save */
     Props?: Properties;
+
+    /**
+     * Desired codepage for legacy file formats
+     *
+     * This requires encoding support to be loaded.  It is automatically loaded
+     * in `xlsx.full.min.js` and in CommonJS / Extendscript, but an extra step
+     * is required in React / Angular / Webpack / ESM deployments.
+     *
+     * Check the relevant guide https://docs.sheetjs.com/docs/getting-started/
+     */
+    codepage?: number;
+
+    /** Base64 encoding of NUMBERS base for exports */
+    numbers?: string;
 }
 
 /** Workbook Object */
@@ -258,6 +304,9 @@ export interface WorkBook {
     Workbook?: WBProps;
 
     vbaraw?: any;
+
+    /** Original file type (when parsed with `read` or `readFile`) */
+    bookType?: BookType;
 }
 
 export interface SheetProps {
@@ -319,6 +368,21 @@ export interface WorkbookProperties {
     CodeName?: string;
 }
 
+/** DBF Field Header */
+export interface DBFField {
+    /** Original Field Name */
+    name?: string;
+
+    /** Field Type */
+    type?: string;
+
+    /** Field Length */
+    len?: number;
+
+    /** Field Decimal Count */
+    dec?: number;
+}
+
 /** Column Properties Object */
 export interface ColInfo {
     /* --- visibility --- */
@@ -337,8 +401,14 @@ export interface ColInfo {
     /** width in "characters" */
     wch?: number;
 
+    /** outline / group level */
+    level?: number;
+
     /** Excel's "Max Digit Width" unit, always integral */
     MDW?: number;
+
+    /** DBF Field Header */
+    DBF?: DBFField;
 }
 
 /** Row Properties Object */
@@ -530,7 +600,7 @@ export type ExcelDataType = 'b' | 'n' | 'e' | 's' | 'd' | 'z';
  * Type of generated workbook
  * @default 'xlsx'
  */
-export type BookType = 'xlsx' | 'xlsm' | 'xlsb' | 'xls' | 'xla' | 'biff8' | 'biff5' | 'biff2' | 'xlml' | 'ods' | 'fods' | 'csv' | 'txt' | 'sylk' | 'html' | 'dif' | 'rtf' | 'prn' | 'eth';
+export type BookType = 'xlsx' | 'xlsm' | 'xlsb' | 'xls' | 'xla' | 'biff8' | 'biff5' | 'biff2' | 'xlml' | 'ods' | 'fods' | 'csv' | 'txt' | 'sylk' | 'slk' | 'html' | 'dif' | 'rtf' | 'prn' | 'eth' | 'dbf' | 'numbers';
 
 /** Comment element */
 export interface Comment {
@@ -539,6 +609,9 @@ export interface Comment {
 
     /** Plaintext of the comment */
     t: string;
+
+    /** If true, mark the comment as a part of a thread */
+    T?: boolean;
 }
 
 /** Cell comments */
@@ -669,6 +742,9 @@ export interface Sheet2JSONOpts extends DateNFOption {
     /** if true, return raw data; if false, return formatted text */
     raw?: boolean;
 
+    /** if true, skip hidden rows and columns */
+    skipHidden?: boolean;
+
     /** if true, return raw numbers; if false, return formatted numbers */
     rawNumbers?: boolean;
 }
@@ -693,7 +769,7 @@ export interface JSON2SheetOpts extends CommonOptions, DateNFOption {
 
 export interface SheetJSONOpts extends JSON2SheetOpts, OriginOption {}
 
-export interface Table2SheetOpts extends CommonOptions, DateNFOption {
+export interface Table2SheetOpts extends CommonOptions, DateNFOption, OriginOption, SheetOption {
     /** If true, plaintext parsing will not parse values */
     raw?: boolean;
 
@@ -787,8 +863,8 @@ export interface XLSX$Utils {
     /** Creates a new workbook */
     book_new(): WorkBook;
 
-    /** Append a worksheet to a workbook */
-    book_append_sheet(workbook: WorkBook, worksheet: WorkSheet, name?: string): void;
+    /** Append a worksheet to a workbook, returns new worksheet name */
+    book_append_sheet(workbook: WorkBook, worksheet: WorkSheet, name?: string, roll?: boolean): string;
 
     /** Set sheet visibility (visible/hidden/very hidden) */
     book_set_sheet_visibility(workbook: WorkBook, sheet: number|string, visibility: number): void;
@@ -806,7 +882,7 @@ export interface XLSX$Utils {
     cell_add_comment(cell: CellObject, text: string, author?: string): void;
 
     /** Assign an Array Formula to a range */
-    sheet_set_array_formula(ws: WorkSheet, range: Range|string, formula: string): WorkSheet;
+    sheet_set_array_formula(ws: WorkSheet, range: Range|string, formula: string, dynamic?: boolean): WorkSheet;
 
     /** Add an array of arrays of JS data to a worksheet */
     sheet_add_aoa<T>(ws: WorkSheet, data: T[][], opts?: SheetAOAOpts): WorkSheet;
@@ -841,4 +917,6 @@ export interface StreamUtils {
     to_html(sheet: WorkSheet, opts?: Sheet2HTMLOpts): any;
     /** JSON object stream, generate one row at a time */
     to_json(sheet: WorkSheet, opts?: Sheet2JSONOpts): any;
+    /** Set `Readable` (internal) */
+    set_readable(Readable: any): void;
 }

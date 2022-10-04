@@ -1,14 +1,11 @@
 /* 15.2.12.2 Custom File Properties Part */
-XMLNS.CUST_PROPS = "http://schemas.openxmlformats.org/officeDocument/2006/custom-properties";
-RELS.CUST_PROPS  = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/custom-properties';
-
 var custregex = /<[^>]+>[^<]*/g;
 function parse_cust_props(data/*:string*/, opts) {
 	var p = {}, name = "";
 	var m = data.match(custregex);
 	if(m) for(var i = 0; i != m.length; ++i) {
 		var x = m[i], y = parsexmltag(x);
-		switch(y[0]) {
+		switch(strip_ns(y[0])) {
 			case '<?xml': break;
 			case '<Properties': break;
 			case '<property': name = unescapexml(y.name); break;
@@ -47,13 +44,11 @@ function parse_cust_props(data/*:string*/, opts) {
 	return p;
 }
 
-var CUST_PROPS_XML_ROOT = writextag('Properties', null, {
-	'xmlns': XMLNS.CUST_PROPS,
-	'xmlns:vt': XMLNS.vt
-});
-
 function write_cust_props(cp/*::, opts*/)/*:string*/ {
-	var o = [XML_HEADER, CUST_PROPS_XML_ROOT];
+	var o = [XML_HEADER, writextag('Properties', null, {
+		'xmlns': XMLNS.CUST_PROPS,
+		'xmlns:vt': XMLNS.vt
+	})];
 	if(!cp) return o.join("");
 	var pid = 1;
 	keys(cp).forEach(function custprop(k) { ++pid;

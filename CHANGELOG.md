@@ -4,6 +4,102 @@ This log is intended to keep track of backwards-incompatible changes, including
 but not limited to API changes and file location changes.  Minor behavioral
 changes may not be included if they are not expected to break existing code.
 
+## v0.18.12
+
+* `package.json` added types in `exports` structure
+* uncapped NUMBERS single-sheet single-table export
+* DBF export records using supported codepages
+
+## v0.18.11
+
+* Base64 input ignore data URI wrapper
+* Parse ZIP files that use ZIP64 extended information field
+* More precise handling of time-only values
+* Threaded Comment fallback text for older Excel
+
+## v0.18.10
+
+* `exports` field in package.json to satiate ViteJS and newer tooling
+* JSC (Safari / Bun) perf, see <https://bugs.webkit.org/show_bug.cgi?id=243148>
+* workbook `bookType` property to denote the origin format when parsed from file
+* XLSX force export of stub cells with number formats when `sheetStubs` is set
+
+## v0.18.9
+
+* XLSX / ODS write defined names
+* sync defined names to AutoFilter setting on export
+* 1904 date system setting properly roundtripped
+* ODS read/write number formats
+
+## v0.18.8
+
+* Plaintext parsing of dateless meridien time values (`1:23:45 PM`)
+* Legacy format (SYLK / WK# / Multiplan) minutiae 
+
+## v0.18.7
+
+* Normalized handling of `\r` and `\n` newline characters
+
+## v0.18.6
+
+* Removed all npm dependencies
+* Auto-correct bad Google Sheets format `d.m`
+* NUMBERS write merge cells, cells up to column "ALL"
+
+## v0.18.5
+
+* Enabled `sideEffects: false` in package.json
+* Basic NUMBERS write support
+
+## v0.18.4
+
+* CSV output omits trailing record separator
+* Properly terminate NodeJS Streams
+* DBF preserve column types on import and use when applicable on export
+
+## v0.18.3
+
+* Removed references to `require` and `process` in browser builds
+
+## v0.18.2
+
+* Hotfix for unicode processing of XLSX exports
+
+## v0.18.1
+
+* Removed Node ESM build script and folded into standard ESM build
+* Removed undocumented aliases including `make_formulae` and `get_formulae`
+
+## v0.18.0
+
+* Browser scripts only expose `XLSX` variable
+* Module no longer ships with `dist/jszip.js` browser script
+
+## v0.17.4
+
+* CLI script moved to `xlsx-cli` package
+
+## v0.17.3
+
+* `window.XLSX` explicit assignment to satiate LWC
+* CSV Proper formatting of errors
+* HTML emit data-\* attributes
+
+## v0.17.2
+
+* Browser and Node optional ESM support
+* DSV correct handling of bare quotes (h/t @bgamrat)
+
+## v0.17.1
+
+* `XLSB` writer uses short cell form when viable
+
+## 0.17.0:
+
+* mini build includes ODS parse/write support
+* DBF explicitly cap worksheet to 1<<20 rows
+* XLS throw errors on truncated records
+
 ## v0.16.2
 
 * Disabled `PRN` parsing by default (better support for CSV without delimeters)

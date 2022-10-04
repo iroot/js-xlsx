@@ -572,7 +572,6 @@ var PtgDupes = {
 	/*::[*/0x5C/*::]*/: 0x3C, /*::[*/0x7C/*::]*/: 0x3C,
 	/*::[*/0x5D/*::]*/: 0x3D, /*::[*/0x7D/*::]*/: 0x3D
 };
-(function(){for(var y in PtgDupes) PtgTypes[y] = PtgTypes[PtgDupes[y]];})();
 
 var Ptg18 = {
 	/*::[*/0x01/*::]*/: { n:'PtgElfLel', f:parse_PtgElfLel },
@@ -597,12 +596,12 @@ var Ptg19 = {
 	/*::[*/0x08/*::]*/: { n:'PtgAttrGoto', f:parse_PtgAttrGoto },
 	/*::[*/0x10/*::]*/: { n:'PtgAttrSum', f:parse_PtgAttrSum },
 	/*::[*/0x20/*::]*/: { n:'PtgAttrBaxcel', f:parse_PtgAttrBaxcel },
+	/*::[*/0x21/*::]*/: { n:'PtgAttrBaxcel', f:parse_PtgAttrBaxcel },
 	/*::[*/0x40/*::]*/: { n:'PtgAttrSpace', f:parse_PtgAttrSpace },
 	/*::[*/0x41/*::]*/: { n:'PtgAttrSpaceSemi', f:parse_PtgAttrSpaceSemi },
 	/*::[*/0x80/*::]*/: { n:'PtgAttrIfError', f:parse_PtgAttrIfError },
 	/*::[*/0xFF/*::]*/: {}
 };
-Ptg19[0x21] = Ptg19[0x20];
 
 /* [MS-XLS] 2.5.198.103 ; [MS-XLSB] 2.5.97.87 */
 function parse_RgbExtra(blob, length, rgce, opts) {
@@ -646,7 +645,7 @@ function parse_Rgce(blob, length, opts) {
 	while(target != blob.l) {
 		length = target - blob.l;
 		id = blob[blob.l];
-		R = PtgTypes[id];
+		R = PtgTypes[id] || PtgTypes[PtgDupes[id]];
 		if(id === 0x18 || id === 0x19) R = (id === 0x18 ? Ptg18 : Ptg19)[blob[blob.l + 1]];
 		if(!R || !R.f) { /*ptgs.push*/(parsenoop(blob, length)); }
 		else { ptgs.push([R.n, R.f(blob, length, opts)]); }
@@ -689,13 +688,15 @@ var PtgBinOp = {
 	PtgSub: "-"
 };
 
-// List of invalid characters needs to be tested further
-var quoteCharacters /*:RegExp */ = new RegExp(/[^\w\u4E00-\u9FFF\u3040-\u30FF]/);
-function formula_quote_sheet_name(sname/*:string*/, opts)/*:string*/ {
-	if(!sname && !(opts && opts.biff <= 5 && opts.biff >= 2)) throw new Error("empty sheet name");
-	if (quoteCharacters.test(sname)) return "'" + sname + "'";
-	return sname;
+// TODO: explore space
+function make_3d_range(start, end) {
+	var s = start.lastIndexOf("!"), e = end.lastIndexOf("!");
+	if(s == -1 && e == -1) return start + ":" + end;
+	if(s > 0 && e > 0 && start.slice(0, s).toLowerCase() == end.slice(0, e).toLowerCase()) return start + ":" + end.slice(e+1);
+	console.error("Cannot hydrate range", start, end);
+	return start + ":" + end;
 }
+
 function get_ixti_raw(supbooks, ixti/*:number*/, opts)/*:string*/ {
 	if(!supbooks) return "SH33TJSERR0";
 	if(opts.biff > 8 && (!supbooks.XTI || !supbooks.XTI[ixti])) return supbooks.SheetNames[ixti];
@@ -731,7 +732,8 @@ function get_ixti_raw(supbooks, ixti/*:number*/, opts)/*:string*/ {
 	}
 }
 function get_ixti(supbooks, ixti/*:number*/, opts)/*:string*/ {
-	return formula_quote_sheet_name(get_ixti_raw(supbooks, ixti, opts), opts);
+	var ixtiraw = get_ixti_raw(supbooks, ixti, opts);
+	return ixtiraw == "#REF" ? ixtiraw : formula_quote_sheet_name(ixtiraw, opts);
 }
 function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks, opts)/*:string*/ {
 	var biff = (opts && opts.biff) || 8;
@@ -791,7 +793,7 @@ function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks,
 				break;
 			case 'PtgRange': /* [MS-XLS] 2.5.198.83 */
 				e1 = stack.pop(); e2 = stack.pop();
-				stack.push(e2+":"+e1);
+				stack.push(make_3d_range(e2,e1));
 				break;
 
 			case 'PtgAttrChoose': /* [MS-XLS] 2.5.198.34 */
@@ -868,7 +870,8 @@ function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks,
 				nameidx = (f[1][2]/*:any*/);
 				var lbl = (supbooks.names||[])[nameidx-1] || (supbooks[0]||[])[nameidx];
 				var name = lbl ? lbl.Name : "SH33TJSNAME" + String(nameidx);
-				if(name in XLSXFutureFunctions) name = XLSXFutureFunctions[name];
+				/* [MS-XLSB] 2.5.97.10 Ftab -- last verified 20220204 */
+				if(name && name.slice(0,6) == "_xlfn." && !opts.xlfn) name = name.slice(6);
 				stack.push(name);
 				break;
 
@@ -891,7 +894,7 @@ function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks,
 					if(supbooks[bookidx] && supbooks[bookidx][nameidx]) o += supbooks[bookidx][nameidx].Name;
 					else if(supbooks[0] && supbooks[0][nameidx]) o += supbooks[0][nameidx].Name;
 					else {
-						var ixtidata = get_ixti_raw(supbooks, bookidx, opts).split(";;");
+						var ixtidata = (get_ixti_raw(supbooks, bookidx, opts)||"").split(";;");
 						if(ixtidata[nameidx - 1]) o = ixtidata[nameidx - 1]; // TODO: confirm this is correct
 						else o += "SH33TJSERRX";
 					}
@@ -935,8 +938,7 @@ function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks,
 				if(supbooks.sharedf[encode_cell(c)]) {
 					var parsedf = (supbooks.sharedf[encode_cell(c)]);
 					stack.push(stringify_formula(parsedf, _range, q, supbooks, opts));
-				}
-				else {
+				} else {
 					var fnd = false;
 					for(e1=0;e1!=supbooks.arrayf.length; ++e1) {
 						/* TODO: should be something like range_has */
@@ -1039,6 +1041,7 @@ function stringify_formula(formula/*Array<any>*/, range, cell/*:any*/, supbooks,
 		}
 	}
 	if(stack.length > 1 && opts.WTF) throw new Error("bad formula stack");
+	if(stack[0] == "TRUE") return true; if(stack[0] == "FALSE") return false;
 	return stack[0];
 }
 

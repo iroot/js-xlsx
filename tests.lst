@@ -45,6 +45,7 @@ text_and_numbers.xlsb
 time_stress_test_1.xlsb.pending
 xlsx-stream-d-date-cell.xlsb
 AutoFilter.xlsx
+DataTypesFormats.xlsx
 ErrorTypes.xlsx
 LONumbers-2010.xlsx
 LONumbers-2011.xlsx
@@ -227,7 +228,7 @@ apachepoi_MatrixFormulaEvalTestData.xlsx
 apachepoi_NewStyleConditionalFormattings.xlsx
 apachepoi_NewlineInFormulas.xlsx
 # apachepoi_NumberFormatApproxTests.xlsx # xlml
-apachepoi_NumberFormatTests.xlsx
+apachepoi_NumberFormatTests.xlsx # upstream changed file
 apachepoi_RepeatingRowsCols.xlsx
 apachepoi_SampleSS.strict.xlsx
 apachepoi_SampleSS.xlsx
@@ -277,9 +278,9 @@ apachepoi_evaluate_formula_with_structured_table_references.xlsx
 apachepoi_headerFooterTest.xlsx
 apachepoi_noSharedStringTable.xlsx
 apachepoi_picture.xlsx
-apachepoi_poc-shared-strings.xlsx
-apachepoi_poc-xmlbomb-empty.xlsx
-apachepoi_poc-xmlbomb.xlsx
+# apachepoi_poc-shared-strings.xlsx # string length exceeds 32767 chars
+# apachepoi_poc-xmlbomb-empty.xlsx # string length exceeds 32767 chars
+# apachepoi_poc-xmlbomb.xlsx # string length exceeds 32767 chars
 # apachepoi_protected_passtika.xlsx # password
 apachepoi_ref-56737.xlsx
 apachepoi_ref2-56737.xlsx
@@ -777,7 +778,7 @@ apachepoi_46136-NoWarnings.xls
 apachepoi_46136-WithWarnings.xls
 apachepoi_46137.xls
 apachepoi_46250.xls
-apachepoi_46368.xls
+# apachepoi_46368.xls # string length exceeds 32767 chars
 apachepoi_46445.xls
 apachepoi_46515.xls
 apachepoi_46670_http.xls
@@ -1443,3 +1444,4 @@ artifacts/wps/write.xlsx
 artifacts/wps/write.xml
 dbf/d11.dbf
 dbf/vfp3.dbf
+numbers/types_61.numbers

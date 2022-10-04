@@ -10,6 +10,7 @@ var colregex = /<(?:\w:)?col\b[^>]*[\/]?>/g;
 var afregex = /<(?:\w:)?autoFilter[^>]*([\/]|>([\s\S]*)<\/(?:\w:)?autoFilter)>/g;
 var marginregex= /<(?:\w:)?pageMargins[^>]*\/>/g;
 var sheetprregex = /<(?:\w:)?sheetPr\b(?:[^>a-z][^>]*)?\/>/;
+var sheetprregex2= /<(?:\w:)?sheetPr[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetPr)>/;
 var svsregex = /<(?:\w:)?sheetViews[^>]*(?:[\/]|>([\s\S]*)<\/(?:\w:)?sheetViews)>/;
 
 /* 18.3 Worksheets */
@@ -32,6 +33,7 @@ function parse_ws_xml(data/*:?string*/, opts, idx/*:number*/, rels, wb/*:WBWBPro
 	/* 18.3.1.82 sheetPr CT_SheetPr */
 	var sheetPr = data1.match(sheetprregex);
 	if(sheetPr) parse_ws_xml_sheetpr(sheetPr[0], s, wb, idx);
+	else if((sheetPr = data1.match(sheetprregex2))) parse_ws_xml_sheetpr2(sheetPr[0], sheetPr[1]||"", s, wb, idx, styles, themes);
 
 	/* 18.3.1.35 dimension CT_SheetDimension */
 	var ridx = (data1.match(/<(?:\w*:)?dimension/)||{index:-1}).index;
@@ -104,6 +106,9 @@ function parse_ws_xml_sheetpr(sheetPr/*:string*/, s, wb/*:WBWBProps*/, idx/*:num
 	if(!wb.Sheets[idx]) wb.Sheets[idx] = {};
 	if(data.codeName) wb.Sheets[idx].CodeName = unescapexml(utf8read(data.codeName));
 }
+function parse_ws_xml_sheetpr2(sheetPr/*:string*/, body/*:string*/, s, wb/*:WBWBProps*/, idx/*:number*/) {
+	parse_ws_xml_sheetpr(sheetPr.slice(0, sheetPr.indexOf(">")), s, wb, idx);
+}
 function write_ws_xml_sheetpr(ws, wb, idx, opts, o) {
 	var needed = false;
 	var props = {}, payload = null;
@@ -151,9 +156,9 @@ function parse_ws_xml_hlinks(s, data/*:Array<string>*/, rels) {
 		var rel = ((rels || {})['!id']||[])[val.id];
 		if(rel) {
 			val.Target = rel.Target;
-			if(val.location) val.Target += "#"+val.location;
+			if(val.location) val.Target += "#"+unescapexml(val.location);
 		} else {
-			val.Target = "#" + val.location;
+			val.Target = "#" + unescapexml(val.location);
 			rel = {Target: val.Target, TargetMode: 'Internal'};
 		}
 		val.Rel = rel;
@@ -191,6 +196,7 @@ function parse_ws_xml_cols(columns, cols) {
 		var coll = parsexmltag(cols[coli], true);
 		if(coll.hidden) coll.hidden = parsexmlbool(coll.hidden);
 		var colm=parseInt(coll.min, 10)-1, colM=parseInt(coll.max,10)-1;
+		if(coll.outlineLevel) coll.level = (+coll.outlineLevel || 0);
 		delete coll.min; delete coll.max; coll.width = +coll.width;
 		if(!seencol && coll.width) { seencol = true; find_mdw_colw(coll.width); }
 		process_col(coll);
@@ -222,7 +228,7 @@ function write_ws_xml_autofilter(data, ws, wb, idx)/*:string*/ {
 		var name = names[i];
 		if(name.Name != '_xlnm._FilterDatabase') continue;
 		if(name.Sheet != idx) continue;
-		name.Ref = "'" + wb.SheetNames[idx] + "'!" + ref; break;
+		name.Ref = formula_quote_sheet_name(wb.SheetNames[idx]) + "!" + fix_range(ref); break;
 	}
 	if(i == names.length) names.push({ Name: '_xlnm._FilterDatabase', Sheet: idx, Ref: "'" + wb.SheetNames[idx] + "'!" + ref  });
 	return writextag("autoFilter", null, {ref:ref});
@@ -230,7 +236,7 @@ function write_ws_xml_autofilter(data, ws, wb, idx)/*:string*/ {
 
 /* 18.3.1.88 sheetViews CT_SheetViews */
 /* 18.3.1.87 sheetView CT_SheetView */
-var sviewregex = /<(?:\w:)?sheetView(?:[^>a-z][^>]*)?\/?>/;
+var sviewregex = /<(?:\w:)?sheetView(?:[^>a-z][^>]*)?\/?>/g;
 function parse_ws_xml_sheetviews(data, wb/*:WBWBProps*/) {
 	if(!wb.Views) wb.Views = [{}];
 	(data.match(sviewregex)||[]).forEach(function(r/*:string*/, i/*:number*/) {
@@ -240,7 +246,7 @@ function parse_ws_xml_sheetviews(data, wb/*:WBWBProps*/) {
 		// $FlowIgnore
 		if(+tag.zoomScale) wb.Views[i].zoom = +tag.zoomScale;
 		// $FlowIgnore
-		if(parsexmlbool(tag.rightToLeft)) wb.Views[i].RTL = true;
+		if(tag.rightToLeft && parsexmlbool(tag.rightToLeft)) wb.Views[i].RTL = true;
 	});
 }
 function write_ws_xml_sheetviews(ws, opts, idx, wb)/*:string*/ {
@@ -251,7 +257,8 @@ function write_ws_xml_sheetviews(ws, opts, idx, wb)/*:string*/ {
 }
 
 function write_ws_xml_cell(cell/*:Cell*/, ref, ws, opts/*::, idx, wb*/)/*:string*/ {
-	if(cell.v === undefined && typeof cell.f !== "string" || cell.t === 'z') return "";
+	if(cell.c) ws['!comments'].push([ref, cell.c]);
+	if((cell.v === undefined || cell.t === "z" && !(opts||{}).sheetStubs) && typeof cell.f !== "string" && typeof cell.z == "undefined") return "";
 	var vv = "";
 	var oldt = cell.t, oldv = cell.v;
 	if(cell.t !== "z") switch(cell.t) {
@@ -265,11 +272,11 @@ function write_ws_xml_cell(cell/*:Cell*/, ref, ws, opts/*::, idx, wb*/)/*:string
 				cell.t = 'n';
 				vv = ''+(cell.v = datenum(parseDate(cell.v)));
 			}
-			if(typeof cell.z === 'undefined') cell.z = SSF._table[14];
+			if(typeof cell.z === 'undefined') cell.z = table_fmt[14];
 			break;
 		default: vv = cell.v; break;
 	}
-	var v = writetag('v', escapexml(vv)), o = ({r:ref}/*:any*/);
+	var v = (cell.t == "z" || cell.v == null)? "" : writetag('v', escapexml(vv)), o = ({r:ref}/*:any*/);
 	/* TODO: cell style */
 	var os = get_cell_style(opts.cellXfs, cell, opts);
 	if(os !== 0) o.s = os;
@@ -280,23 +287,27 @@ function write_ws_xml_cell(cell/*:Cell*/, ref, ws, opts/*::, idx, wb*/)/*:string
 		case 'e': o.t = "e"; break;
 		case 'z': break;
 		default: if(cell.v == null) { delete cell.t; break; }
+			if(cell.v.length > 32767) throw new Error("Text length must not exceed 32767 characters");
 			if(opts && opts.bookSST) {
 				v = writetag('v', ''+get_sst_id(opts.Strings, cell.v, opts.revStrings));
 				o.t = "s"; break;
 			}
-			o.t = "str"; break;
+			else o.t = "str"; break;
 	}
 	if(cell.t != oldt) { cell.t = oldt; cell.v = oldv; }
 	if(typeof cell.f == "string" && cell.f) {
 		var ff = cell.F && cell.F.slice(0, ref.length) == ref ? {t:"array", ref:cell.F} : null;
 		v = writextag('f', escapexml(cell.f), ff) + (cell.v != null ? v : "");
 	}
-	if(cell.l) ws['!links'].push([ref, cell.l]);
-	if(cell.c) ws['!comments'].push([ref, cell.c]);
+	if(cell.l) {
+		cell.l.display = escapexml(vv);
+		ws['!links'].push([ref, cell.l]);
+	}
+	if(cell.D) o.cm = 1;
 	return writextag('c', v, o);
 }
 
-var parse_ws_xml_data = (function() {
+var parse_ws_xml_data = /*#__PURE__*/(function() {
 	var cellregex = /<(?:\w+:)?c[ \/>]/, rowregex = /<\/(?:\w+:)?row>/;
 	var rregex = /r=["']([^"']*)["']/, isregex = /<(?:\w+:)?is>([\S\s]*?)<\/(?:\w+:)?is>/;
 	var refregex = /ref=["']([^"']*)["']/;
@@ -319,8 +330,26 @@ return function parse_ws_xml_data(sdata/*:string*/, s, opts, guess/*:Range*/, th
 		if(xlen === 0) continue;
 
 		/* 18.3.1.73 row CT_Row */
-		for(ri = 0; ri < xlen; ++ri) if(x.charCodeAt(ri) === 62) break; ++ri;
-		tag = parsexmltag(x.slice(0,ri), true);
+		var rstarti = 0;
+		outa: for(ri = 0; ri < xlen; ++ri) switch(/*x.charCodeAt(ri)*/x[ri]) {
+			case ">" /*62*/:
+				if(/*x.charCodeAt(ri-1) != 47*/x[ri-1] != "/") { ++ri; break outa; }
+				if(opts && opts.cellStyles) {
+					// TODO: avoid duplication
+					tag = parsexmltag(x.slice(rstarti,ri), true);
+					tagr = tag.r != null ? parseInt(tag.r, 10) : tagr+1; tagc = -1;
+					if(opts.sheetRows && opts.sheetRows < tagr) continue;
+					rowobj = {}; rowrite = false;
+					if(tag.ht) { rowrite = true; rowobj.hpt = parseFloat(tag.ht); rowobj.hpx = pt2px(rowobj.hpt); }
+					if(tag.hidden && parsexmlbool(tag.hidden)) { rowrite = true; rowobj.hidden = true; }
+					if(tag.outlineLevel != null) { rowrite = true; rowobj.level = +tag.outlineLevel; }
+					if(rowrite) rows[tagr-1] = rowobj;
+				}
+				break;
+			case "<" /*60*/: rstarti = ri; break;
+		}
+		if(rstarti >= ri) break;
+		tag = parsexmltag(x.slice(rstarti,ri), true);
 		tagr = tag.r != null ? parseInt(tag.r, 10) : tagr+1; tagc = -1;
 		if(opts.sheetRows && opts.sheetRows < tagr) continue;
 		if(guess.s.r > tagr - 1) guess.s.r = tagr - 1;
@@ -329,7 +358,7 @@ return function parse_ws_xml_data(sdata/*:string*/, s, opts, guess/*:Range*/, th
 		if(opts && opts.cellStyles) {
 			rowobj = {}; rowrite = false;
 			if(tag.ht) { rowrite = true; rowobj.hpt = parseFloat(tag.ht); rowobj.hpx = pt2px(rowobj.hpt); }
-			if(tag.hidden == "1") { rowrite = true; rowobj.hidden = true; }
+			if(tag.hidden && parsexmlbool(tag.hidden)) { rowrite = true; rowobj.hidden = true; }
 			if(tag.outlineLevel != null) { rowrite = true; rowobj.level = +tag.outlineLevel; }
 			if(rowrite) rows[tagr-1] = rowobj;
 		}
@@ -362,7 +391,7 @@ return function parse_ws_xml_data(sdata/*:string*/, s, opts, guess/*:Range*/, th
 			if(opts.cellFormula) {
 				if((cref=d.match(match_f))!= null && /*::cref != null && */cref[1] !== '') {
 					/* TODO: match against XLSXFutureFunctions */
-					p.f=unescapexml(utf8read(cref[1])).replace(/\r\n/g, "\n");
+					p.f=unescapexml(utf8read(cref[1]), true);
 					if(!opts.xlfn) p.f = _xlfn(p.f);
 					if(/*::cref != null && cref[0] != null && */cref[0].indexOf('t="array"') > -1) {
 						p.F = (d.match(refregex)||[])[1];
@@ -416,7 +445,7 @@ return function parse_ws_xml_data(sdata/*:string*/, s, opts, guess/*:Range*/, th
 					break;
 				case 'str':
 					p.t = "s";
-					p.v = (p.v!=null) ? utf8read(p.v) : '';
+					p.v = (p.v!=null) ? unescapexml(utf8read(p.v), true) : '';
 					if(opts.cellHTML) p.h = escapehtml(p.v);
 					break;
 				case 'inlineStr':
@@ -450,7 +479,11 @@ return function parse_ws_xml_data(sdata/*:string*/, s, opts, guess/*:Range*/, th
 				}
 			}
 			safe_format(p, fmtid, fillid, opts, themes, styles);
-			if(opts.cellDates && do_format && p.t == 'n' && SSF.is_date(SSF._table[fmtid])) { p.t = 'd'; p.v = numdate(p.v); }
+			if(opts.cellDates && do_format && p.t == 'n' && fmt_is_date(table_fmt[fmtid])) { p.t = 'd'; p.v = numdate(p.v); }
+			if(tag.cm && opts.xlmeta) {
+				var cm = (opts.xlmeta.Cell||[])[+tag.cm-1];
+				if(cm && cm.type == 'XLDAPR') p.D = true;
+			}
 			if(dense) {
 				var _r = decode_cell(tag.r);
 				if(!s[_r.r]) s[_r.r] = [];
@@ -505,13 +538,11 @@ function write_ws_xml_data(ws/*:Worksheet*/, opts, idx/*:number*/, wb/*:Workbook
 	return o.join("");
 }
 
-var WS_XML_ROOT = writextag('worksheet', null, {
-	'xmlns': XMLNS.main[0],
-	'xmlns:r': XMLNS.r
-});
-
 function write_ws_xml(idx/*:number*/, opts, wb/*:Workbook*/, rels)/*:string*/ {
-	var o = [XML_HEADER, WS_XML_ROOT];
+	var o = [XML_HEADER, writextag('worksheet', null, {
+		'xmlns': XMLNS_main[0],
+		'xmlns:r': XMLNS.r
+	})];
 	var s = wb.SheetNames[idx], sidx = 0, rdata = "";
 	var ws = wb.Sheets[s];
 	if(ws == null) ws = {};
@@ -552,7 +583,7 @@ function write_ws_xml(idx/*:number*/, opts, wb/*:Workbook*/, rels)/*:string*/ {
 
 	/* sheetCalcPr */
 
-	if(ws['!protect'] != null) o[o.length] = write_ws_xml_protection(ws['!protect']);
+	if(ws['!protect']) o[o.length] = write_ws_xml_protection(ws['!protect']);
 
 	/* protectedRanges */
 	/* scenarios */
@@ -581,6 +612,7 @@ function write_ws_xml(idx/*:number*/, opts, wb/*:Workbook*/, rels)/*:string*/ {
 			}
 			if((relc = l[1].Target.indexOf("#")) > -1) rel.location = escapexml(l[1].Target.slice(relc+1));
 			if(l[1].Tooltip) rel.tooltip = escapexml(l[1].Tooltip);
+			rel.display = l[1].display;
 			o[o.length] = writextag("hyperlink",null,rel);
 		});
 		o[o.length] = "</hyperlinks>";
